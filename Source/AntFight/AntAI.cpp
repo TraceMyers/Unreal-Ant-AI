@@ -3,11 +3,8 @@
 #include "Components/BoxComponent.h"
 #include "Common.h"
 
-// TODO: more smoke testing
-// TODO: ants occasionally still getting stuck on corners
-// TODO: implement basic path smoothing
+// TODO: debug packaged
 // TODO: code cleanup
-// TODO: find ants falling through at init
 
 void AAntAI::on_collis_box_overlap_begin(
 	UPrimitiveComponent* overlapped_comp,
@@ -142,7 +139,7 @@ void AAntAI::BeginPlay() {
 	jammed_time = 0.0f;
 	unjam_time = 0.0f;
 	prev_yaw = 0.0f;
-	acceptance_radius = capsule_full_height * 2.2f;
+	acceptance_radius = capsule_full_height * 1.5f;
 	breadcrumb_reset();
 }
 
@@ -160,6 +157,8 @@ void AAntAI::set_true_move(float delta_time) {
 			if (pathing) {
 				status = AI_STATUS_PATHING;
 				cur_waypoint = GetActorLocation();
+				stuck_check_ctr = 0.0f;
+				stuck_check_i = 0;
 			}
 			else {
 				status = AI_STATUS_WAITING;
@@ -175,6 +174,8 @@ void AAntAI::set_true_move(float delta_time) {
 		else if (dstatus == DISPATCH_READY) {
 			status = AI_STATUS_PATHING;
 			cur_waypoint = GetActorLocation();
+			stuck_check_ctr = 0.0f;
+			stuck_check_i = 0;
 		}
 	}
 	else if (status == AI_STATUS_PATHING) {
@@ -196,10 +197,32 @@ void AAntAI::set_true_move(float delta_time) {
 			}
 			else {
 				cur_waypoint = *next_waypoint;
+				goto PATH_KEEP_MOVING;
 			}
 		}
 		else {
 			PATH_KEEP_MOVING:
+
+			stuck_check_ctr += delta_time;
+			if (stuck_check_ctr >= STUCK_CHECK_TIME) {
+				stuck_check_ctr = 0;
+				stuck_check_cache[stuck_check_i++] = cur_loc;
+				if (stuck_check_i == STUCK_CHECK_CT) {
+					stuck_check_i = 0;
+					const FVector start_loc = stuck_check_cache[0];
+					float avg_dist = 0.0f;
+					for (int i = 1; i < STUCK_CHECK_CT; i++) {
+						avg_dist += FVector::Distance(start_loc, stuck_check_cache[i]);
+					}
+					avg_dist *= STUCK_CHECK_AVG_CONST;
+					if (avg_dist <= STUCK_AVG_DIST) {
+						comm::print("stuck, repathing");
+						status = AI_STATUS_INIT_PATH;
+						path_incomplete = false;
+						return;
+					}
+				}
+			}
 
 			const FVector intended_move = calculate_intended_move(cur_loc);
 			if (unjam) {

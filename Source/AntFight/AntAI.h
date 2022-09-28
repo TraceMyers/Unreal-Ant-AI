@@ -76,6 +76,8 @@ private:
 	static constexpr int BREADCRUMB_CT = 10;
 	static constexpr int AVOID_TICK_MAX = 3;
 	static constexpr int MAX_NEARBY = 7;
+	static constexpr int STUCK_CHECK_CT = 8;
+	static constexpr float STUCK_CHECK_TIME = 0.1f;
 	static constexpr float AYHT_MAX = PI * 0.5f * 0.5f;
 	static constexpr float AYHT_MIN = -AYHT_MAX; // avoidance yaw half theta
 	static constexpr float AYHT_STEP = AYHT_MAX * 1.8f;
@@ -90,6 +92,8 @@ private:
 	static constexpr float ROT_SPEED_MULTIPLIER_MIN = 0.4f;
 	static constexpr float BREADCRUMB_DT = 0.3f;
 	static constexpr float RETRACE_WAIT_TIME = 0.3f;
+	static constexpr float STUCK_CHECK_AVG_CONST = 1.0f / (float)(STUCK_CHECK_CT - 1);
+	static constexpr float STUCK_AVG_DIST = 1.0f;
 	
 	NearbyAnt nearby_ants[MAX_NEARBY];
 	int nearby_top = 0;
@@ -117,6 +121,9 @@ private:
 	FVector cur_waypoint;
 	float acceptance_radius;
 	bool ant_ahead;
+	FVector stuck_check_cache[STUCK_CHECK_CT];
+	int stuck_check_i;
+	float stuck_check_ctr;
 
 	void avoid_collisions(float delta_time);
 	int possible_collision(AAnt* other_ant) const;

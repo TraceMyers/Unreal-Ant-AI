@@ -102,6 +102,9 @@ protected:
 	virtual void set_true_move(float delta_time);
 	virtual void cling_smooth_rotate(float delta_time);
 	void dbg_draw_true_move();
+	// If an ant falls off the map, we just teleport it to a safe location on the map underside.
+	// Appears to be no longer necessary during testing, but will avoid a potential crash since ant references
+	// are not yet properly handled when they are killed.
 	void fix_fall_through();
 	
 private:

@@ -163,7 +163,7 @@ void AAnt::set_on_ground() {
 }
 
 // Gravity currently unnecessary since ants only detach from mesh surface by error. So, just using this to
-// push ant into mesh
+// push ant away from their mesh's up vector for convenient use with fix_fall_through()
 void AAnt::fall(float delta_time) {
 	// fall_velocity.Z -= GRAVITY_ACCEL * delta_time;
 	// const FVector fall_delta = fall_velocity * delta_time;
@@ -207,7 +207,7 @@ bool AAnt::try_move_on_ground(const FVector& move, float delta_time, bool accel)
 		const FVector vertical_disp = mesh_up * capsule_radius * 3.0f;
 		const FVector vertical_tolerance = -vertical_disp * 3.0f;
 		tr_start = cur_loc + move * rot_speed_multiplier + vertical_disp;
-		const float drop_hit_dist = comm::trace_hit_ground(tr_start, tr_start + vertical_tolerance, this);
+		const float drop_hit_dist = comm::trace_hit_ground(tr_start, tr_start + vertical_tolerance);
 		if (drop_hit_dist > 0.0f) {
 			if (accel) {
 				if (ground_speed < MAX_GROUND_SPEED && !no_accel) {
@@ -327,7 +327,7 @@ void AAnt::resolve_overlaps(float delta_time) {
 			const FVector cur_loc = GetActorLocation();
 			const FVector diff_dir = (cur_loc - a->GetActorLocation()).GetSafeNormal();
 			
-			// what fallows is mushy brain math that may or may not make 100% sense. but, it seems to work well
+			// resolving ant-ant collisions by pushing them outside of each other, dependent on velocity vectors
 			const float fault_theta_val = FMath::Abs( HALF_PI - FMath::Acos(FVector::DotProduct(diff_dir, get_mesh_forward()))) / HALF_PI;
 			const FVector tr_start = cur_loc + diff_dir * nudge_dist * fault_theta_val * fault_speed_val + vertical_disp;
 			

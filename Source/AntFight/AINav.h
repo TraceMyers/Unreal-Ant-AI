@@ -198,7 +198,7 @@ private:
 	NavNode* find_nearby_node(const FVector& loc, float sq_radius=MIN_SQ_RADIUS);
 	bool get_grid_pos(const FVector& loc, FIntVector& gpos) const;
 	TArray<NavNode>** get_nearby_graph_boxes(const FVector& loc, uint32& ct);
-	void smooth_path(int key);
+	void smooth_path(int key, int path_len);
 	void node_net_spatial_normalization(void* init_nodes);
 };
 

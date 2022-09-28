@@ -127,21 +127,13 @@ bool AINav::path_is_complete(int key) const {
 
 void AINav::pathfinding_finished() {
 	if (pathfinder_path_len > 0) { // if success
-		// TODO: set smoothed path len
-		// TODO: smooth path
-		// for now, just copying path in straight
-		path_lens[cache_write_i] = pathfinder_path_len;
-		FVector* cache_slot = smoothed_path_cache[cache_write_i];
-		for (int i = 0; i < pathfinder_path_len; i++) {
-			cache_slot[i] = pathfinder_buf[i]->location;
-		}
+		smooth_path(cache_write_i, pathfinder_path_len);
 		path_complete[cache_write_i] = full_path_found;
 		path_statuses[cache_write_i] = AI_PATH_READY;
 	}
 	else {
 		path_statuses[cache_write_i] = AI_PATH_FREE;
 	}
-
 	cache_write_i = cache_write_i == PATH_CACHE_LEN - 1 ? 0 : cache_write_i + 1;
 	pathfinding = false;
 }
@@ -355,7 +347,8 @@ void AINav::init_node_net(TriGrid* tri_grid, void* grid_nodes) {
 			const bool share_edge = get_alike_edge(m_pts, n_pts, edge_indices);
 			if (share_edge) {
 				node_m_edges.Add(&node_n);
-				node_n.edges.Add(&node_m);	
+				node_n.edges.Add(&node_m);
+				// with a tiny bit of rewriting, will be useful in spatial normalization
 				// const int tri_m_edge_i = edge_indices & 0x000f;
 				// const int tri_n_edge_i = (edge_indices & 0x00f0) >> 8;
 				// node_m.edges[tri_m_edge_i] = &node_n;
@@ -548,7 +541,7 @@ void AINav::set_nav_graph(void* init_nodes) {
 		init_node.navnode_indices = FIntVector4(i, j, k, nav_i++);
 		// TODO: change once initnode locs are set
 		NavNode nav_node (init_node);
-		nav_node.location = init_node.tri->center;	
+		nav_node.location = init_node.tri->center + init_node.tri->normal * 3.0f;	
 		nav_nodes.Add(nav_node);
 	}
 	GSPACE_ITERATE_END
@@ -594,7 +587,7 @@ AINav::NavNode* AINav::find_nearby_node(const FVector& loc, float sq_radius) {
 			const FVector diff = node.location - loc;
 			const float sq_dist = diff.SizeSquared();
 			if (sq_dist <= sq_radius) {
-				const FVector offset = node.normal * 1.0f;
+				const FVector offset = node.normal * 0.1f;
 				const FVector tr_start = loc + offset;
 				const FVector tr_end = node.location + offset;
 				if (
@@ -649,10 +642,82 @@ TArray<AINav::NavNode>** AINav::get_nearby_graph_boxes(const FVector& loc, uint3
 	return graph_box_cache;
 }
 
-void AINav::smooth_path(int key) {
+// slightly hacky way of smoothing. creates 2 sub-waypoints per waypoint and runs a smoothing algorithm
+// over them. 
+// TODO: use knowledge of mesh to flexibly move points along the mesh - more flexible and likely more successful
+// TODO: cull nearby waypoints
+void AINav::smooth_path(int key, int path_len) {
+	static constexpr int PASS_CT = 5;
+	static constexpr float STRENGTH = 0.8f;
+	static constexpr float HIT_TEST_OFFSET = 7.0f;
+	FVector normal_buf[SMOOTHED_PATH_MAX_LEN];
+	const int end_i = path_len - 1;
+	const float tr_offset = 0.3f;
+	const float tr_offset_sq = tr_offset * tr_offset;
+	const float hit_epsilon_factor = 0.99f;
+	FVector* waypoints = smoothed_path_cache[key];
+	for (int i = 0; i < end_i; i++) {
+		const int wp_i = 3 * i;
+		FVector& path_pos = pathfinder_buf[i]->location;
+		FVector diff = pathfinder_buf[i + 1]->location - path_pos;
+		waypoints[wp_i] = path_pos;
+		waypoints[wp_i + 1] = path_pos + diff * 0.3333f;
+		waypoints[wp_i + 2] = path_pos + diff * 0.6666f;
+		const FVector& normal = pathfinder_buf[i]->normal;
+		normal_buf[wp_i] = normal;
+		normal_buf[wp_i + 1] = normal;
+		normal_buf[wp_i + 2] = normal;
+		for (int j = wp_i; j < wp_i + 3; j++) {
+			FVector& wp = waypoints[j];
+			FVector& n = normal_buf[j];
+			const FVector& tr_start = wp + n * HIT_TEST_OFFSET;
+			const float hit_dist = comm::trace_hit_ground(tr_start, wp);
+			if (hit_dist >= 0.0f) {
+				waypoints[j] += n * (HIT_TEST_OFFSET - hit_dist + 1.0f);
+			}
+		}
+	}
+
+	const int wp_end_i = end_i * 3;
+	const int wp_end_i_m1 = wp_end_i - 1;
+	waypoints[wp_end_i] = pathfinder_buf[end_i]->location;
 	
+	for (int i = 0; i < PASS_CT; i++) {
+		for (int j = 1; j < wp_end_i_m1; j++) {
+			FVector& prev = waypoints[j - 1];
+			FVector& cur = waypoints[j];
+			FVector& next = waypoints[j + 1];
+
+			const FVector midpoint = prev + (next - prev) * 0.5f;
+			const FVector new_cur = cur + (midpoint - cur) * STRENGTH;
+
+			FVector tr_start = prev + normal_buf[j - 1] * tr_offset; // TODO: un-magic this number
+			FVector tr_end = new_cur + normal_buf[j] * tr_offset;
+			if(
+				comm::trace_hit_static_actor(tr_start, tr_end) >= 0.0f
+				|| comm::trace_hit_static_actor(tr_end, tr_start) >= 0.0f
+			) {
+				continue;	
+			}
+
+			cur = new_cur;
+		}	
+	}
+	path_lens[key] = (path_len - 1) * 3 + 1;
 }
 
 void AINav::node_net_spatial_normalization(void* init_nodes) {
+	// - start at good candidate node (normal not in-line with y axis or x axis)
+	// - rotate world x-axis onto node's tri plane. move in that direction until reaching edge
+	// rotate movement vector onto next tri with no y axis component. continue moving until reaching distance decided
+	// by parameter. drop a node, connect to prev.
+	// - continue until either can no longer, or a loop is mode.
+	// - for each node in net, do the same as before, but starting with y-axis.
+	// - any node that has not yet explored either axis should do so
+	// - if dist < intended node dist, but the normal theta delta since starting is great enough, drop a node.
+	// - if a node is near enough to an edge or node and passes line test, either connect to the other node or create
+	// - a new node on the edge and connect to that.
+	// - if a node is nearer and all edge collision tests pass, merge nodes.
+	// - for any init_nodes that are not 'covered' by new net, drop a new node there and repeat the process
 	
 }
