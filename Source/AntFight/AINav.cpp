@@ -541,7 +541,11 @@ void AINav::set_nav_graph(void* init_nodes) {
 		init_node.navnode_indices = FIntVector4(i, j, k, nav_i++);
 		// TODO: change once initnode locs are set
 		NavNode nav_node (init_node);
-		nav_node.location = init_node.tri->center + init_node.tri->normal * 3.0f;	
+		// Hacky magic number used here to push the nodes above the mesh, since ants do a trace hit test
+		// to check whether or not they've reached their waypoint. My current idea of how to make this better
+		// is just to make it a parameter than can be changed within the editor. Ideally, the line testing
+		// used to cull nodes would stop occasionally allowing bad nodes.
+		nav_node.location = init_node.tri->center + init_node.tri->normal * 4.0f; 
 		nav_nodes.Add(nav_node);
 	}
 	GSPACE_ITERATE_END

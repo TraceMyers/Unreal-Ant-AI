@@ -3,7 +3,8 @@
 #include "Components/BoxComponent.h"
 #include "Common.h"
 
-// TODO: debug packaged
+// TODO: add some sounds
+// TODO: add basic menus
 // TODO: code cleanup
 
 void AAntAI::on_collis_box_overlap_begin(
@@ -104,6 +105,8 @@ AAntAI::AAntAI() {
 	breadcrumb_ctr = 0.0f;
 	prev_waypoint_breadcrumb_ct = 0;
 	ant_ahead = false;
+	stuck_check_i = 0;
+	stuck_check_ctr = 0.0f;
 }
 
 void AAntAI::Tick(float delta_time) {
@@ -203,26 +206,36 @@ void AAntAI::set_true_move(float delta_time) {
 		else {
 			PATH_KEEP_MOVING:
 
-			stuck_check_ctr += delta_time;
-			if (stuck_check_ctr >= STUCK_CHECK_TIME) {
-				stuck_check_ctr = 0;
-				stuck_check_cache[stuck_check_i++] = cur_loc;
-				if (stuck_check_i == STUCK_CHECK_CT) {
-					stuck_check_i = 0;
-					const FVector start_loc = stuck_check_cache[0];
-					float avg_dist = 0.0f;
-					for (int i = 1; i < STUCK_CHECK_CT; i++) {
-						avg_dist += FVector::Distance(start_loc, stuck_check_cache[i]);
-					}
-					avg_dist *= STUCK_CHECK_AVG_CONST;
-					if (avg_dist <= STUCK_AVG_DIST) {
-						comm::print("stuck, repathing");
-						status = AI_STATUS_INIT_PATH;
-						path_incomplete = false;
-						return;
-					}
-				}
-			}
+			// stuck_check_ctr += delta_time;
+			// if (stuck_check_ctr >= STUCK_CHECK_TIME) {
+			// 	stuck_check_ctr = 0;
+			// 	if (stuck_check_i < 0 || stuck_check_i >= STUCK_CHECK_CT) {
+			// 		// BUG: only occasionally running into this issue where stuck_check_i *appears* to be
+			// 		// erroneously overwritten with what *appears* to be a float value near zero. With the given
+			// 		// compiler, stuck_check_i comes after stuck_check_cache and before stuck_check_ctr. It doesn't
+			// 		// seem like a buffer overflow from stuck_check_cache, since none of the position values are
+			// 		// near zero in this test. I don't know why stuck_check_ctr would be the culprit; it's possible
+			// 		// both are being overwritten and stuck_check_ctr >= STUCK_CHECK_TIME still functions semi-correctly
+			// 		stuck_check_i = 0;
+			// 		comm::print("stuck check i fixed");
+			// 	}
+			// 	stuck_check_cache[stuck_check_i++] = cur_loc;
+			// 	if (stuck_check_i == STUCK_CHECK_CT) {
+			// 		stuck_check_i = 0;
+			// 		const FVector start_loc = stuck_check_cache[0];
+			// 		float avg_dist = 0.0f;
+			// 		for (int i = 1; i < STUCK_CHECK_CT; i++) {
+			// 			avg_dist += FVector::Distance(start_loc, stuck_check_cache[i]);
+			// 		}
+			// 		avg_dist *= STUCK_CHECK_AVG_CONST;
+			// 		if (avg_dist <= STUCK_AVG_DIST) {
+			// 			comm::print("stuck, repathing");
+			// 			status = AI_STATUS_INIT_PATH;
+			// 			path_incomplete = false;
+			// 			return;
+			// 		}
+			// 	}
+			// }
 
 			const FVector intended_move = calculate_intended_move(cur_loc);
 			if (unjam) {

@@ -19,7 +19,6 @@
 
 AAnt::AAnt() {
 	PrimaryActorTick.bCanEverTick = true;
-	GetMovementComponent()->PrimaryComponentTick.bCanEverTick = false;
 	USceneComponent* root = CreateDefaultSubobject<USceneComponent>(FName("root"));
 	SetRootComponent(root);
 	skelly_mesh = CreateDefaultSubobject<USkeletalMeshComponent>(FName("skeletal mesh"));
@@ -44,6 +43,7 @@ AAnt::~AAnt() {
 
 void AAnt::BeginPlay() {
 	Super::BeginPlay();
+	GetMovementComponent()->PrimaryComponentTick.bCanEverTick = false;
 	game_instance = Cast<UAntGI>(GetGameInstance());
 	AAntGMB* ant_gmb = Cast<AAntGMB>(GetWorld()->GetAuthGameMode());
 	capsule_radius = GetCapsuleComponent()->GetScaledCapsuleRadius();
