@@ -48,6 +48,32 @@ void AINav::dbg_draw(float delta_time) {
 #endif 
 }
 
+void AINav::dbg_draw_navmesh(const FVector& loc) {
+	uint32 box_ct;
+	const auto graph_boxes = get_nearby_graph_boxes(loc, box_ct);
+	if (graph_boxes == nullptr) {
+		return;
+	}
+	TArray<TPair<NavNode*, NavNode*>> node_pairs;
+	for (uint32 i = 0; i < box_ct; i++) {
+		auto& graph_box = *graph_boxes[i];
+		for (int j = 0; j < graph_box.Num(); j++) {
+			NavNode& node = graph_box[j];
+			DrawDebugCircle(world, node.location, 2.0f, 3, FColor::Red);
+			for (int n = 0; n < node.edges.Num(); n++) {
+				NavNode* node_edge = node.edges[n];
+				TPair<NavNode*, NavNode*> pair_a(&node, node_edge);
+				TPair<NavNode*, NavNode*> pair_b(node_edge, &node);
+				if (node_pairs.Find(pair_a) >= 0 || node_pairs.Find(pair_b) >= 0) {
+					continue;
+				}
+				DrawDebugLine(world, node.location, node_edge->location, FColor::Blue, false, -1, 0, 1.0f);
+				node_pairs.Add(pair_a);
+			}
+		}
+	}
+}
+
 int AINav::find_path(
 	const FVector& from,
 	const FVector& to,
@@ -66,6 +92,55 @@ int AINav::find_path(
 		if (start_node == nullptr) {
 			return -1;
 		}
+		NavNode* end_node = find_nearby_node(to, sq_end_radius);
+		if (end_node == nullptr || start_node->location == end_node->location) {
+			return -1;
+		}
+		// TODO: probably unnecessary - remove?
+		for (int i = 0; i < PATH_MAX_LEN; i++) {
+			pathfinder_buf[i] = nullptr;
+		}
+		GSPACE_ITERATE_START
+		auto& graph_box = nav_graph[i][j][k];
+		for (int m = 0; m < graph_box.Num(); m++) {
+			NavNode& nav_node = graph_box[m];
+			nav_node.nav_reset();
+		}
+		GSPACE_ITERATE_END
+		pathfinder->stop_thread();
+		path_statuses[cache_write_i] = AI_PATH_FINDING;
+		pathfinding = true;
+		const bool thread_started = pathfinder->start_thread(
+			start_node,
+			end_node,
+			pathfinder_buf,
+			&pathfinder_path_len,
+			&full_path_found,
+			this
+		);
+		if (!thread_started) {
+			pathfinding = false;
+			path_statuses[cache_write_i] = AI_PATH_FREE;
+			return -1;
+		}
+		return cache_write_i;
+	}
+	return -1;
+}
+
+int AINav::find_path(
+	NavNode* start_node,
+	const FVector& to,
+	bool& cached,
+	bool& copy_backward,
+	float sq_end_radius
+) {
+	const int cached_path_index = find_cached_path_end_rad(start_node->location, to, copy_backward, sq_end_radius);	
+	if (cached_path_index >= 0) {
+		cached = true;
+		return cached_path_index;
+	}
+	if (!pathfinding) {
 		NavNode* end_node = find_nearby_node(to, sq_end_radius);
 		if (end_node == nullptr || start_node->location == end_node->location) {
 			return -1;
@@ -121,6 +196,14 @@ FVector* AINav::get_path(int key, int& path_len) {
 	return nullptr;
 }
 
+AINav::NavNode* AINav::get_end_node(int key) const {
+	return end_nodes[key];
+}
+
+AINav::NavNode* AINav::get_start_node(int key) const {
+	return start_nodes[key];
+}
+
 bool AINav::path_is_complete(int key) const {
 	return path_complete[key];
 }
@@ -128,6 +211,8 @@ bool AINav::path_is_complete(int key) const {
 void AINav::pathfinding_finished() {
 	if (pathfinder_path_len > 0) { // if success
 		smooth_path(cache_write_i, pathfinder_path_len);
+		start_nodes[cache_write_i] = pathfinder_buf[0];
+		end_nodes[cache_write_i] = pathfinder_buf[pathfinder_path_len - 1];
 		path_complete[cache_write_i] = full_path_found;
 		path_statuses[cache_write_i] = AI_PATH_READY;
 	}
@@ -138,16 +223,54 @@ void AINav::pathfinding_finished() {
 	pathfinding = false;
 }
 
+AINav::NavNode* AINav::find_nearest_node(const FVector& loc) {
+	uint32 box_ct;
+	const auto graph_boxes = get_nearby_graph_boxes(loc, box_ct);
+	if (graph_boxes == nullptr) {
+		return nullptr;
+	}
+	float shortest_sq_dist = FLT_MAX;
+	NavNode* nearest_node = nullptr;
+	for (uint32 i = 0; i < box_ct; i++) {
+		auto& graph_box = *graph_boxes[i];
+		for (int j = 0; j < graph_box.Num(); j++) {
+			NavNode& node = graph_box[j];
+			const FVector diff = node.location - loc;
+			const float sq_dist = diff.SizeSquared();
+			if (sq_dist < shortest_sq_dist) {
+				const FVector offset = node.normal * 0.1f;
+				const FVector tr_start = loc + offset;
+				const FVector tr_end = node.location + offset;
+				if (
+					comm::trace_hit_static_actor(tr_start, tr_end) > 0.0f 
+					|| comm::trace_hit_static_actor(tr_end, tr_start) > 0.0f
+				) {
+					continue;
+				}
+				shortest_sq_dist = sq_dist;
+				nearest_node = &node;
+			}	
+		}
+	}
+	return nearest_node;
+}
+
 void AINav::dbg_draw_graph() {
 	GSPACE_ITERATE_START
 	auto& box_nodes = nav_graph[i][j][k];
+	TArray<TPair<NavNode*, NavNode*>> node_pairs;
 	for (int m = 0; m < box_nodes.Num(); m++) {
 		auto& node = box_nodes[m];
 		DrawDebugCircle(world, node.location, 2.0f, 3, FColor::Red);
 		for (int n = 0; n < node.edges.Num(); n++) {
-			if (node.edges[n] != nullptr) {
-				DrawDebugLine(world, node.location, node.edges[n]->location, FColor::Blue, false, -1, 0, 1.0f);
+			NavNode* node_edge = node.edges[n];
+			TPair<NavNode*, NavNode*> pair_a(&node, node_edge);
+			TPair<NavNode*, NavNode*> pair_b(node_edge, &node);
+			if (node_pairs.Find(pair_a) >= 0 || node_pairs.Find(pair_b) >= 0) {
+				continue;
 			}
+			DrawDebugLine(world, node.location, node_edge->location, FColor::Blue, false, -1, 0, 1.0f);
+			node_pairs.Add(pair_a);
 		}
 	}
 	GSPACE_ITERATE_END
@@ -162,7 +285,6 @@ void AINav::dbg_draw_normals() {
 	}
 	GSPACE_ITERATE_END
 }
-
 
 int AINav::find_cached_path(const FVector& from, const FVector& to, bool& copy_backward) const {
 	for (int i = 0; i < PATH_CACHE_LEN; i++) {
@@ -194,7 +316,7 @@ int AINav::find_cached_path_start_rad(
 			if (path_match_start_rad(from, to, path_start, path_end, start_rad)) {
 				return i;
 			}
-			if (path_match_start_rad(from, to, path_end, path_start, start_rad)) {
+			if (path_match_end_rad(from, to, path_end, path_start, start_rad)) {
 				copy_backward = true;
 				return i;
 			}
@@ -216,10 +338,10 @@ int AINav::find_cached_path_end_rad(
 			if (path_match_end_rad(from, to, path_start, path_end, end_rad)) {
 				return i;
 			}
-			if (path_match_end_rad(from, to, path_end, path_start, end_rad)) {
-				copy_backward = true;
-				return i;
-			}
+			// if (path_match_start_rad(from, to, path_end, path_start, end_rad)) {
+			// 	copy_backward = true;
+			// 	return i;
+			// }
 		}
 	}
 	return -1;
@@ -545,7 +667,7 @@ void AINav::set_nav_graph(void* init_nodes) {
 		// to check whether or not they've reached their waypoint. My current idea of how to make this better
 		// is just to make it a parameter than can be changed within the editor. Ideally, the line testing
 		// used to cull nodes would stop occasionally allowing bad nodes.
-		nav_node.location = init_node.tri->center + init_node.tri->normal * 4.0f; 
+		nav_node.location = init_node.tri->center + init_node.tri->normal * 5.0f; 
 		nav_nodes.Add(nav_node);
 	}
 	GSPACE_ITERATE_END
@@ -646,10 +768,10 @@ TArray<AINav::NavNode>** AINav::get_nearby_graph_boxes(const FVector& loc, uint3
 	return graph_box_cache;
 }
 
-// slightly hacky way of smoothing. creates 2 sub-waypoints per waypoint and runs a smoothing algorithm
+// hacky way of smoothing. creates 2 sub-waypoints per waypoint and runs a smoothing algorithm
 // over them. 
 // TODO: use knowledge of mesh to flexibly move points along the mesh - more flexible and likely more successful
-// TODO: cull nearby waypoints
+// TODO: cull nearby waypoints that line test ok
 void AINav::smooth_path(int key, int path_len) {
 	static constexpr int PASS_CT = 5;
 	static constexpr float STRENGTH = 0.8f;
@@ -657,8 +779,6 @@ void AINav::smooth_path(int key, int path_len) {
 	FVector normal_buf[SMOOTHED_PATH_MAX_LEN];
 	const int end_i = path_len - 1;
 	const float tr_offset = 0.3f;
-	const float tr_offset_sq = tr_offset * tr_offset;
-	const float hit_epsilon_factor = 0.99f;
 	FVector* waypoints = smoothed_path_cache[key];
 	for (int i = 0; i < end_i; i++) {
 		const int wp_i = 3 * i;
@@ -675,10 +795,14 @@ void AINav::smooth_path(int key, int path_len) {
 			FVector& wp = waypoints[j];
 			FVector& n = normal_buf[j];
 			const FVector& tr_start = wp + n * HIT_TEST_OFFSET;
-			const float hit_dist = comm::trace_hit_ground(tr_start, wp);
-			if (hit_dist >= 0.0f) {
-				waypoints[j] += n * (HIT_TEST_OFFSET - hit_dist + 1.0f);
+			float hit_dist = 1.0f;
+			while (hit_dist > 0.0f) {
+				hit_dist = comm::trace_hit_ground(tr_start, wp);
+				if (hit_dist >= 0.0f) {
+					wp += n * (HIT_TEST_OFFSET - hit_dist + 4.0f);
+				}
 			}
+			waypoints[j] = wp;
 		}
 	}
 

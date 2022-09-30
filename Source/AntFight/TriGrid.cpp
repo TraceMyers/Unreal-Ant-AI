@@ -623,6 +623,9 @@ bool TriGrid::line_test_cull(const TArray<AStaticMeshActor*>& ground_actors) {
 	for (int i = 0; i < ground_actor_ct; i++) {
 		mesh_hit_trackers.Add(TArray<float>());
 	}
+	FCollisionQueryParams query_params;
+	query_params.bTraceComplex = true;
+	query_params.bIgnoreTouches = true;
 	
 	GSPACE_ITERATE_START
 
@@ -648,7 +651,8 @@ bool TriGrid::line_test_cull(const TArray<AStaticMeshActor*>& ground_actors) {
 					hit,
 					tr_start,
 					tr_low,
-					ECC_WorldStatic
+					ECC_WorldStatic,
+					query_params
 				);
 				if (hit.Distance == 0.0f) {
 					break;	

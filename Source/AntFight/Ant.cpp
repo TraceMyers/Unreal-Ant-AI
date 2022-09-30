@@ -37,9 +37,7 @@ AAnt::AAnt() {
 	fall_init();
 }
 
-AAnt::~AAnt() {
-	comm::print("destroying ant");
-}
+AAnt::~AAnt() {}
 
 void AAnt::BeginPlay() {
 	Super::BeginPlay();

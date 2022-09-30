@@ -105,14 +105,17 @@ AAntAI::AAntAI() {
 	breadcrumb_ctr = 0.0f;
 	prev_waypoint_breadcrumb_ct = 0;
 	ant_ahead = false;
-	stuck_check_i = 0;
-	stuck_check_ctr = 0.0f;
+	stuck_check_ctr = 0;
+	stuck = false;
 }
 
 void AAntAI::Tick(float delta_time) {
 	set_true_move(delta_time);
 	Super::Tick(delta_time);
 	cling_smooth_rotate(delta_time);
+	if (stuck) {
+		dbg_draw_true_move();
+	}
 }
 
 void AAntAI::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) {
@@ -151,8 +154,9 @@ void AAntAI::set_true_move(float delta_time) {
 	true_move = FVector::ZeroVector;
 	if (status == AI_STATUS_INIT_PATH) {
 		// comm::print("%s init path", TCHAR_TO_ANSI(*this->GetName()));
+		int test_key;
 		if (!path_incomplete) {
-			destination = dispatch->test_get_destination();
+			destination = dispatch->test_get_destination(test_key);
 		}	
 		bool pathing = false;
 		if (dispatch->get_path(this, destination, pathing)) {
@@ -161,7 +165,7 @@ void AAntAI::set_true_move(float delta_time) {
 				status = AI_STATUS_PATHING;
 				cur_waypoint = GetActorLocation();
 				stuck_check_ctr = 0.0f;
-				stuck_check_i = 0;
+				waypoint_ctr = 0;
 			}
 			else {
 				status = AI_STATUS_WAITING;
@@ -169,16 +173,17 @@ void AAntAI::set_true_move(float delta_time) {
 		}
 	}
 	else if (status == AI_STATUS_WAITING) {
-		// TODO: frozen ants are not waiting
+		// comm::print("%s waiting", TCHAR_TO_ANSI(*this->GetName()));
 		DISPATCH_STATUS dstatus = dispatch->get_pathfinding_status(this, path_incomplete);
 		if (dstatus == DISPATCH_FAILED) {
+			comm::print("%s dispatch failed", TCHAR_TO_ANSI(*this->GetName()));
 			status = AI_STATUS_INIT_PATH;
 		}
 		else if (dstatus == DISPATCH_READY) {
 			status = AI_STATUS_PATHING;
 			cur_waypoint = GetActorLocation();
 			stuck_check_ctr = 0.0f;
-			stuck_check_i = 0;
+			waypoint_ctr = 0;
 		}
 	}
 	else if (status == AI_STATUS_PATHING) {
@@ -200,44 +205,17 @@ void AAntAI::set_true_move(float delta_time) {
 			}
 			else {
 				cur_waypoint = *next_waypoint;
-				goto PATH_KEEP_MOVING;
+				waypoint_ctr++;
+				goto PATH_KEEP_MOVING; // avoids micro-stutters between waypoints
 			}
 		}
 		else {
 			PATH_KEEP_MOVING:
-
-			// stuck_check_ctr += delta_time;
-			// if (stuck_check_ctr >= STUCK_CHECK_TIME) {
-			// 	stuck_check_ctr = 0;
-			// 	if (stuck_check_i < 0 || stuck_check_i >= STUCK_CHECK_CT) {
-			// 		// BUG: only occasionally running into this issue where stuck_check_i *appears* to be
-			// 		// erroneously overwritten with what *appears* to be a float value near zero. With the given
-			// 		// compiler, stuck_check_i comes after stuck_check_cache and before stuck_check_ctr. It doesn't
-			// 		// seem like a buffer overflow from stuck_check_cache, since none of the position values are
-			// 		// near zero in this test. I don't know why stuck_check_ctr would be the culprit; it's possible
-			// 		// both are being overwritten and stuck_check_ctr >= STUCK_CHECK_TIME still functions semi-correctly
-			// 		stuck_check_i = 0;
-			// 		comm::print("stuck check i fixed");
-			// 	}
-			// 	stuck_check_cache[stuck_check_i++] = cur_loc;
-			// 	if (stuck_check_i == STUCK_CHECK_CT) {
-			// 		stuck_check_i = 0;
-			// 		const FVector start_loc = stuck_check_cache[0];
-			// 		float avg_dist = 0.0f;
-			// 		for (int i = 1; i < STUCK_CHECK_CT; i++) {
-			// 			avg_dist += FVector::Distance(start_loc, stuck_check_cache[i]);
-			// 		}
-			// 		avg_dist *= STUCK_CHECK_AVG_CONST;
-			// 		if (avg_dist <= STUCK_AVG_DIST) {
-			// 			comm::print("stuck, repathing");
-			// 			status = AI_STATUS_INIT_PATH;
-			// 			path_incomplete = false;
-			// 			return;
-			// 		}
-			// 	}
-			// }
-
-			const FVector intended_move = calculate_intended_move(cur_loc);
+			// todo: check if true move is too close to normal for too long, say stuck
+			const FVector waypoint_diff = cur_waypoint - cur_loc;
+			FVector intended_move = (cur_waypoint - cur_loc).GetSafeNormal();
+			correct_intended_move(intended_move, cur_loc);
+			
 			if (unjam) {
 				true_move = intended_move;
 				unjam_time += delta_time;
@@ -292,7 +270,8 @@ void AAntAI::set_true_move(float delta_time) {
 			}
 			else {
 				RETRACE_KEEP_MOVING:
-				true_move = calculate_intended_move(cur_loc);	
+				true_move = (cur_waypoint - cur_loc).GetSafeNormal();
+				correct_intended_move(true_move, cur_loc);	
 			}
 			calculate_rot_speed_penalty(prev_true_move);
 		}
@@ -466,7 +445,7 @@ void AAntAI::nonground_collis_check() {
 void AAntAI::set_step_retrace() {
 	int j = breadcrumb_i == 0 ? BREADCRUMB_CT - 1 : breadcrumb_i - 1;
 	step_retrace_top = prev_waypoint_breadcrumb_ct < BREADCRUMB_CT ? prev_waypoint_breadcrumb_ct : BREADCRUMB_CT;
-	for (int i = 0; i < prev_waypoint_breadcrumb_ct; i++, j++) {
+	for (int i = 0; i < step_retrace_top; i++, j++) {
 		if (j == BREADCRUMB_CT) {
 			j = 0;
 		}
@@ -514,8 +493,7 @@ void AAntAI::breadcrumb_reset() {
 	}
 }
 
-FVector AAntAI::calculate_intended_move(const FVector& cur_loc) const {
-	const FVector intended_move = (cur_waypoint - cur_loc).GetSafeNormal();
+void AAntAI::correct_intended_move(FVector& intended_move, const FVector& cur_loc) const {
 	const FVector mesh_up = get_mesh_up();
 	const float half_mesh_plane_theta =
 		(HALF_PI - FMath::Acos(FVector::DotProduct(mesh_up, intended_move))) * 0.5f;
@@ -529,5 +507,5 @@ FVector AAntAI::calculate_intended_move(const FVector& cur_loc) const {
 		FMath::Cos(half_mesh_plane_theta)
 	);
 	rot_quat.Normalize();
-	return rot_quat.RotateVector(intended_move);
+	intended_move = rot_quat.RotateVector(intended_move);
 }

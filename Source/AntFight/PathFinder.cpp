@@ -1,6 +1,4 @@
 #include "PathFinder.h"
-#include "Common.h"
-
 
 FPathFinder::FPathFinder() {
 	thread = nullptr;	
@@ -72,7 +70,6 @@ uint32 FPathFinder::Run() {
 		}
 	}
 
-	// TODO: program exit? don't need to do this
 	// was previously just copying in backwards, which was fine, but doing it this way
 	// has the benefit of partial paths; this way is: just going back to find the start then
 	// copying up to length of the path or up to PATH_MAX_LEN

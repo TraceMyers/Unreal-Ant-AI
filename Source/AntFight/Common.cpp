@@ -34,11 +34,13 @@ namespace comm {
 			ECC_STATIC_MESHES,
 			collis_params
 		);
-		TWeakObjectPtr<AActor> actor = hit.Actor;
-		if (actor.IsValid() && actor.Get()->ActorHasTag(FName("ground"))) {
-			hit_loc = hit.Location;
-			hit_actor = hit.GetActor();
-			return hit.Distance;
+		if (hit.Actor != nullptr) {
+			TWeakObjectPtr<AActor> actor = hit.Actor;
+			if (actor.IsValid() && actor.Get()->ActorHasTag(FName("ground"))) {
+				hit_loc = hit.Location;
+				hit_actor = hit.GetActor();
+				return hit.Distance;
+			}
 		}
 		return -1.0f;
 	}
@@ -56,11 +58,13 @@ namespace comm {
 			ECC_STATIC_MESHES,
 			collis_params
 		);
-		TWeakObjectPtr<AActor> actor = hit.Actor;
-		if (actor.IsValid() && Cast<AStaticMeshActor>(actor.Get())) {
-			hit_loc = hit.Location;
-			hit_actor = hit.GetActor();
-			return hit.Distance;
+		if (hit.Actor != nullptr) {
+			TWeakObjectPtr<AActor> actor = hit.Actor;
+			if (actor.IsValid() && Cast<AStaticMeshActor>(actor.Get())) {
+				hit_loc = hit.Location;
+				hit_actor = hit.GetActor();
+				return hit.Distance;
+			}
 		}
 		return -1.0f;
 	}
@@ -78,13 +82,15 @@ namespace comm {
 			ECC_STATIC_MESHES,
 			collis_params
 		);
-		TWeakObjectPtr<AActor> actor = hit.Actor;
-		if (actor.IsValid()) {
-			AStaticMeshActor* sm = Cast<AStaticMeshActor>(actor.Get());
-			if (sm && !sm->ActorHasTag("Ground")) {
-				hit_loc = hit.Location;
-				hit_actor = hit.GetActor();
-				return hit.Distance;
+		if (hit.Actor != nullptr) {
+			TWeakObjectPtr<AActor> actor = hit.Actor;
+			if (actor.IsValid()) {
+				AStaticMeshActor* sm = Cast<AStaticMeshActor>(actor.Get());
+				if (sm && !sm->ActorHasTag("Ground")) {
+					hit_loc = hit.Location;
+					hit_actor = hit.GetActor();
+					return hit.Distance;
+				}
 			}
 		}
 		return -1.0f;
@@ -103,11 +109,13 @@ namespace comm {
 			ECC_Visibility,
 			collis_params
 		);
-		TWeakObjectPtr<AActor> actor = hit.Actor;
-		if (actor.IsValid() && Cast<AAnt>(actor.Get())) {
-			hit_loc = hit.Location;
-			hit_actor = hit.GetActor();
-			return hit.Distance;
+		if (hit.Actor != nullptr) {
+			TWeakObjectPtr<AActor> actor = hit.Actor;
+			if (actor.IsValid() && Cast<AAnt>(actor.Get())) {
+				hit_loc = hit.Location;
+				hit_actor = hit.GetActor();
+				return hit.Distance;
+			}
 		}
 		return -1.0f;
 	}

@@ -82,6 +82,10 @@ public:
 	~AINav();
 	void build_graph(UWorld* world, TriGrid* tri_grid);
 	void dbg_draw(float delta_time);
+	void dbg_draw_navmesh(const FVector& near_loc);
+	// earlier, currently unused but maybe future-ly usable implementation; problem: with a radius
+	// around the start location, the path to the start point might be unclear. Also requires two nearby node searches
+	// every call
 	int find_path(
 		const FVector& from,
 		const FVector& to,
@@ -90,9 +94,22 @@ public:
 		float sq_end_radius=MIN_SQ_RADIUS,
 		float sq_start_radius=MIN_SQ_RADIUS
 	);
+	// current version. Makes far more sense; just keep track of what node the ant was last on
+	// this will likely remain useful even when the version where end_node is known is implemented
+	int find_path(
+    	NavNode* start_node,
+    	const FVector& to,
+    	bool& cached,
+    	bool& copy_backward,
+    	float sq_end_radius=MIN_SQ_RADIUS
+    );
 	AI_PATH_STATUS get_path_status(int key) const;
 	FVector* get_path(int key, int& path_len);
+	NavNode* get_end_node(int key) const;
+	NavNode* get_start_node(int key) const;
 	bool path_is_complete(int key) const;
+	NavNode* find_nearest_node(const FVector& loc);
+	NavNode* find_nearby_node(const FVector& loc, float sq_radius=MIN_SQ_RADIUS);
 	// called by pathfinder
 	void pathfinding_finished();
 	
@@ -129,6 +146,8 @@ private:
 	FThreadSafeBool pathfinding;
 	
 	FVector smoothed_path_cache[PATH_CACHE_LEN][SMOOTHED_PATH_MAX_LEN];
+	NavNode* end_nodes[PATH_CACHE_LEN];
+	NavNode* start_nodes[PATH_CACHE_LEN];
 	AI_PATH_STATUS path_statuses[PATH_CACHE_LEN];
 	int path_lens[PATH_CACHE_LEN];
 	bool path_complete[PATH_CACHE_LEN];
@@ -195,7 +214,6 @@ private:
 		const FVector& path_a,
 		const FVector& path_b
 	);
-	NavNode* find_nearby_node(const FVector& loc, float sq_radius=MIN_SQ_RADIUS);
 	bool get_grid_pos(const FVector& loc, FIntVector& gpos) const;
 	TArray<NavNode>** get_nearby_graph_boxes(const FVector& loc, uint32& ct);
 	void smooth_path(int key, int path_len);

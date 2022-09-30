@@ -19,14 +19,13 @@ void AAntAIDispatch::BeginPlay() {
 		if (ant) {
 			ant->set_dispatch(this);
 			ants.Add(ant);
-			// comm::print("ant: %s", TCHAR_TO_ANSI(*ant->GetName()));
+			
 		}
 		else {
 			AAntPlayer* ant_player = Cast<AAntPlayer>(actors[i]);
 			if (ant_player) {
 				ant_player->set_dispatch(this);
 				ant_players.Add(ant_player);
-				// comm::print("ant player: %s", TCHAR_TO_ANSI(*ant_player->GetName()));
 			}
 		}
 	}
@@ -79,6 +78,7 @@ FVector* AAntAIDispatch::get_valid_path(int key, int& path_len, const FVector& c
 	}
 	// // TODO: change to whatever sq_radius was originally called for
 	if (first_node_sq_dist > AINav::MIN_SQ_RADIUS) {
+		comm::print("distance: %.2f, max %.2f", first_node_sq_dist, AINav::MIN_SQ_RADIUS);
 		return nullptr;
 	}
 	return path;
@@ -108,9 +108,13 @@ void AAntAIDispatch::Tick(float DeltaTime) {
 			int path_len;
 			FVector* path = get_valid_path(key, path_len, call.caller->GetActorLocation(), call.copy_backward);
 			if (!path) {
+				const FVector dest = call.caller->get_destination();
+				comm::print("b invalid path to %.2f, %.2f, %.2f", dest.X, dest.Y, dest.Z);
 				main_calls.drop_waiting_call(i);
 				continue;
 			}
+			AINav::NavNode* end_node = ai_nav->get_end_node(key);
+			ant_nodes[call.caller] = end_node;
 			const bool path_complete = ai_nav->path_is_complete(key);
 			main_calls.transfer_waiting_to_pathing(call.caller, i, path, path_len, path_complete);	
 		}
@@ -120,25 +124,18 @@ void AAntAIDispatch::Tick(float DeltaTime) {
 	}
 }
 
-bool AAntAIDispatch::get_path(AAntAI* caller, const FVector& dest, bool& cached, float sq_radius) {
-	const FVector start = caller->GetActorLocation();
-	return get_path(caller, start, dest, cached, sq_radius);	
-}
-
 bool AAntAIDispatch::get_path(
 	AAntAI* caller,
-	const FVector& start,
 	const FVector& dest,
 	bool& cached,
 	float sq_radius
 ) {
 	bool copy_backward = false;
 	const int key = ai_nav->find_path(
-		start,
+		ant_nodes[caller],
 		dest,
 		cached,
 		copy_backward,
-		sq_radius,
 		sq_radius
 	);
 	if (key < 0) {
@@ -147,7 +144,14 @@ bool AAntAIDispatch::get_path(
 	if (cached) {
 		int path_len;
 		FVector* path = get_valid_path(key, path_len, caller->GetActorLocation(), copy_backward);
+		if (copy_backward) {
+			ant_nodes[caller] = ai_nav->get_start_node(key);	
+		}
+		else {
+			ant_nodes[caller] = ai_nav->get_end_node(key);	
+		}
 		if (!path) {
+			comm::print("invalid path to %.2f, %.2f, %.2f", dest.X, dest.Y, dest.Z);
 			return false;
 		}
 		return main_calls.add_pathing_call(caller, path, path_len, copy_backward) >= 0;
@@ -181,9 +185,6 @@ FVector* AAntAIDispatch::get_next_waypoint(const AAntAI* caller) {
 				main_calls.drop_pathing_call(i);
 				return nullptr;
 			}
-			if (call.path[call.path_i] == FVector::ZeroVector) {
-				comm::print("hello");
-			}
 			return &call.path[call.path_i++];
 		}
 	}
@@ -192,11 +193,20 @@ FVector* AAntAIDispatch::get_next_waypoint(const AAntAI* caller) {
 
 void AAntAIDispatch::set_ai_nav(AINav* _ai_nav) {
 	ai_nav = _ai_nav;
+	for (int i = 0; i < ants.Num(); i++) {
+		auto ant = ants[i];
+		AINav::NavNode* node = ai_nav->find_nearest_node(ant->GetActorLocation());
+#ifdef ANTAIDISPATCH_DEBUG
+		check(node != nullptr);
+#endif
+		ant_nodes.Add(ant, node);
+	}
 }
 
-FVector AAntAIDispatch::test_get_destination() {
+FVector AAntAIDispatch::test_get_destination(int& test_key) {
 	const int task_ct = task_markers.Num();
 	const int marker_i = FMath::RandRange(0, task_ct - 1);
+	test_key = marker_i;
 	const FVector dest = task_markers[marker_i]->GetActorLocation();
 	return dest;
 }

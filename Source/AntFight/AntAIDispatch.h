@@ -28,20 +28,13 @@ public:
 	virtual void Tick(float DeltaTime) override;
 	void set_ai_nav(AINav* ai_nav);
 
-	FVector test_get_destination();
+	FVector test_get_destination(int& test_key);
 	bool get_path(
 		class AAntAI* caller,
 		const FVector& destination,
 		bool& pathing_immediately,
 		float sq_radius=8000.0f
 	);
-	bool get_path(
-		class AAntAI* caller,
-		const FVector& start,
-		const FVector& destination,
-		bool& pathing_immediately,
-		float sq_radius=8000.0f
-	); 
 	DISPATCH_STATUS get_pathfinding_status(const class AAntAI* caller, bool& path_incomplete) const;
 	FVector* get_next_waypoint(const class AAntAI* caller);
 
@@ -250,6 +243,7 @@ private:
     };
 
 	TArray<AAntAI*> ants;
+	TMap<AAntAI*, AINav::NavNode*> ant_nodes;
 	TArray<class AAntPlayer*> ant_players;
 
 	CallContainer main_calls;
