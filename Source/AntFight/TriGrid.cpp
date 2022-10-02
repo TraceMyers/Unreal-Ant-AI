@@ -4,6 +4,7 @@
 #include "Rendering/PositionVertexBuffer.h"
 #include "AntGI.h"
 #include "DrawDebugHelpers.h"
+#include "Kismet/GameplayStatics.h"
 
 // NOTE: triangles whose vertices are all inside other meshes are culled. However, this can lead to problem cases
 // where portions of triangles are outside and are still needed
@@ -79,7 +80,7 @@ void TriGrid::dbg_draw(float delta_time) {
 	// dbg_draw_overlapping_tris();
 	// dbg_draw_overlapping_tri_polygons();
 	// dbg_draw_overlapping_tri_pts();
-	// dbg_draw_new_tris();
+	dbg_draw_new_tris();
 #endif
 	
 	// TODO: also allow optionally turning them on at runtime
@@ -343,15 +344,23 @@ void TriGrid::dbg_draw_overlapping_tris() {
 }
 
 void TriGrid::dbg_toggle_ground_mesh_visibility() {
+	TArray<AActor*> static_mesh_actors;
+	UGameplayStatics::GetAllActorsOfClass(world, AStaticMeshActor::StaticClass(), static_mesh_actors);
 	if (ground_mesh_visibility) {
-		for (int i = 0; i < mesh_cmps.Num(); i++) {
-			mesh_cmps[i]->SetVisibility(false);
+		// for (int i = 0; i < mesh_cmps.Num(); i++) {
+		// 	mesh_cmps[i]->SetVisibility(false);
+		// }
+		for (int i = 0; i < static_mesh_actors.Num(); i++) {
+			Cast<AStaticMeshActor>(static_mesh_actors[i])->GetStaticMeshComponent()->SetVisibility(false);
 		}
 		ground_mesh_visibility = false;
 	}
 	else {
-		for (int i = 0; i < mesh_cmps.Num(); i++) {
-			mesh_cmps[i]->SetVisibility(true);
+		// for (int i = 0; i < mesh_cmps.Num(); i++) {
+		// 	mesh_cmps[i]->SetVisibility(true);
+		// }
+		for (int i = 0; i < static_mesh_actors.Num(); i++) {
+			Cast<AStaticMeshActor>(static_mesh_actors[i])->GetStaticMeshComponent()->SetVisibility(true);
 		}
 		ground_mesh_visibility = true;
 	}

@@ -2,8 +2,8 @@
 
 // #define ORIENTATION_DEBUG 1
 // #define TRIGRID_DEBUG 1
-#define AINAV_DEBUG 1
-#define ANTAIDISPATCH_DEBUG 1
+// #define AINAV_DEBUG 1
+// #define ANTAIDISPATCH_DEBUG 1
 
 namespace comm {
 

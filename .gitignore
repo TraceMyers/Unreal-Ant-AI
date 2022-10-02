@@ -4,6 +4,8 @@ Content/Stylized_Forest/*
 Content/StarterContent/*
 sounds/*
 Blender/*
+.idea/*
+.vs/*
 
 # Visual Studio 2015 user specific files
 .vs/
