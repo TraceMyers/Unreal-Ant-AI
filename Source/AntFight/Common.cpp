@@ -1,5 +1,4 @@
 ﻿#include "Common.h"
-
 #include "Ant.h"
 #include "Engine/StaticMeshActor.h"
 

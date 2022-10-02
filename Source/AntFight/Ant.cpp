@@ -35,6 +35,9 @@ AAnt::AAnt() {
 	no_accel = false;
 	fall_velocity = FVector::ZeroVector;
 	fall_init();
+	GetCapsuleComponent()->SetSimulatePhysics(false);
+	skelly_mesh->SetSimulatePhysics(false);
+	cling_box->SetSimulatePhysics(false);
 }
 
 AAnt::~AAnt() {}
