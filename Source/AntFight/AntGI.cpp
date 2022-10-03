@@ -10,8 +10,6 @@ void UAntGI::Init() {
 }
 
 void UAntGI::Shutdown() {
-	// TODO: remove
-	// Cling::kill_pathfinder();
 	Super::Shutdown();
 }
 
@@ -19,7 +17,7 @@ void UAntGI::StartGameInstance() {
 	Super::StartGameInstance();
 }
 
-void UAntGI::spawn_line(const FVector& a, const FVector& b) {
+void UAntGI::spawn_line(const FVector& a, const FVector& b) const {
 	if (spawner) {
 		spawner->spawn_line(a, b);
 	}
@@ -28,7 +26,7 @@ void UAntGI::spawn_line(const FVector& a, const FVector& b) {
 	}
 }
 
-void UAntGI::spawn_line_actor(const FVector& a, const FVector& b) {
+void UAntGI::spawn_line_actor(const FVector& a, const FVector& b) const {
 	if (spawner) {
 		spawner->spawn_line_actor(a, b);
 	}
@@ -37,7 +35,7 @@ void UAntGI::spawn_line_actor(const FVector& a, const FVector& b) {
 	}
 }
 
-void UAntGI::destroy_line_actors() {
+void UAntGI::destroy_line_actors() const {
 	if (spawner) {
 		spawner->destroy_line_actors();
 	}

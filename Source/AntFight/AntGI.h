@@ -19,9 +19,9 @@ public:
 	virtual void Init() override;
 	virtual void Shutdown() override;
 	virtual void StartGameInstance() override;
-	void spawn_line(const FVector& a, const FVector& b);
-	void spawn_line_actor(const FVector& a, const FVector& b);
-	void destroy_line_actors();
+	void spawn_line(const FVector& a, const FVector& b) const;
+	void spawn_line_actor(const FVector& a, const FVector& b) const;
+	void destroy_line_actors() const;
 
 private:
 	

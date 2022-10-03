@@ -65,6 +65,10 @@ bool TriGrid::init(
 		generate_new_triangles_from_overlapping_tris();
 	}
 	populated = so_far_so_success;
+
+#ifndef TRIGRID_DEBUG
+	clear_demo_data();
+#endif 
 	
 	return populated;	
 }
@@ -75,12 +79,12 @@ void TriGrid::dbg_draw(float delta_time) {
 	}
 	
 #ifdef TRIGRID_DEBUG
-	dbg_draw_edges();
+	// dbg_draw_edges();
 	// dbg_draw_normals();
 	// dbg_draw_overlapping_tris();
 	// dbg_draw_overlapping_tri_polygons();
 	// dbg_draw_overlapping_tri_pts();
-	dbg_draw_new_tris();
+	// dbg_draw_new_tris();
 #endif
 	
 	// TODO: also allow optionally turning them on at runtime
@@ -401,12 +405,11 @@ TArray<Tri>& TriGrid::get_tribox(int i, int j, int k) {
 // --------------------------------------------------------------------------------------------------------:INIT HELPERS
 // ---------------------------------------------------------------------------------------------------------------------
 
-// This one was mostly not fun to figure out. I understand how far from a core feature getting mesh data might
-// be for the average Unreal user, but making it this obtuse of a process + sparse to no documentation
-// led to there being only two de-mystifying resources on ENQUEUE_RENDER_COMMAND that I could find (thank god
-// for those people.) It didn't help that one of them was in Chinese, but they were the ONLY person who used
-// the exposed lambda version of the macro; before reading that it was like I was on the moon figuring out what all of
-// the un-debuggable pieces going into the macro were. https://www.myredstone.top/archives/1962 <<< my hero
+// Pulls data from GPU buffers
+//
+// Documentation on how to do this is nonexistent, and most people doing anything like this just copy each others' code,
+// which wasn't an option for me since I'm doing something slightly different. Thankfully I found a source that
+// demystified ENQUEUE_RENDER_COMMAND: https://www.myredstone.top/archives/1962 <<< my hero
 bool TriGrid::get_vertex_data(
 	const TArray<class AStaticMeshActor*>& ground_actors,
 	TArray<uint16*>& ind_buf,
@@ -538,7 +541,7 @@ bool TriGrid::set_grid_dimensions(
 	return true;
 }
 
-// Such a minor thing, but this allows else-ifs throughout + no redoing any work
+// Such a minor thing, but this allows else-ifs in set_grid_dimensions() + no redoing any work
 bool TriGrid::init_set_grid_dimensions(TArray<uint16*>& ind_buf, TArray<FVector*>& vert_buf, TArray<uint32>& cts) {
 	const FVector* first_mesh_vertices = vert_buf[0];
 	const FVector& fworld_position = first_mesh_vertices[0];
@@ -614,8 +617,8 @@ bool TriGrid::populate_grid(TArray<uint16*>& ind_buf, TArray<FVector*>& vert_buf
 // testing whether a tri is inside another mesh and culling it; aids in creating a single continuous orientation mesh
 bool TriGrid::line_test_cull(const TArray<AStaticMeshActor*>& ground_actors) {
 	
-	// any smaller and the test breaks; must have to do with inherent imprecision and/or some implementation detail
-	// of line tracing
+	// < 1.0f and the test breaks; must have to do with inherent imprecision and/or some implementation detail
+	// of raycasts in UE (... ?)
 	constexpr int DEPTH_NUDGE_DELTA = 1.0f; 
 	constexpr int EXIT_CT = 100;
 	TArray<Tri> inner_tris;
@@ -820,11 +823,13 @@ void TriGrid::generate_new_triangles_from_overlapping_tris() {
 	add_new_tris_to_grid();	
 }
 
-// Each intersection of tri T with tri Q places two new points on Q. Continuous meshes form chains of new points along
-// intersecting tris. If tris have original points A, B, C, generate_polygons() connects
+// Each intersection of tri T with tri Q places two new points on Q. All Intersections on Q form chains of new points 
+// that connect to Q's edges, which connects to Q's visible points (those points that aren't inside another mesh), which
+// altogether forms a polygon. This polygon will later have new tris generated from it to create one continuous mesh
+// from many overlapping ones.
+//
 // all new points in the A -> B -> C -> A direction, excluding those points that are inside other meshes.
-// The direction of intersection point connections can only be inferred once all points are connected (here), when
-// we know the chain of new points begins at one tri edge and terminates at another. The new set of points forms a polygon.
+// The direction of intersection point connections can only be inferred once all points are connected (here).
 // The weakness of this method is that it excludes any polygons where all original tri points are inside other meshes,
 // but some tri surface area is still exposed.
 void TriGrid::generate_polygons(TArray<TArray<PolyPoint>>& poly_points, int overlapping_tri_ct) {
@@ -1051,6 +1056,7 @@ void TriGrid::add_new_tris_to_grid() {
 	}
 }
 
+
 void TriGrid::find_polypoints(
 	TArray<TArray<TriEdge>>& edges,
 	TArray<TArray<PolyPoint>>& poly_points,
@@ -1159,7 +1165,7 @@ int TriGrid::get_intersections(
 	return intersection_ct;
 }
 
-// "pending" here just means we don't yet necessarily know the direction of the connection, since Polygons are
+// "pending" here just means we don't yet necessarily know the direction of the connection; Polygons are
 // unidirectional closed graphs
 inline void TriGrid::add_pending_connections(TArray<PolyPoint>& points, PolyPoint& a, PolyPoint& b, int tri_flags) {
 	int a_index = points.Find(a);
@@ -1243,4 +1249,12 @@ void TriGrid::add_tri_edge_pending_connections(TArray<PolyPoint>& points, int pt
 			points[pt_index].pending_edges.Add(0);
 		}
 	}
+}
+
+void TriGrid::clear_demo_data() {
+	overlapping_tris.Empty();
+	overlap_tri_boxes.Empty();
+	dbg_overlapping_tri_intersection_pts.Empty();
+	overlap_polygons.Empty();
+	new_tris.Empty();
 }

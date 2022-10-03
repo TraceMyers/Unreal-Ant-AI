@@ -10,6 +10,19 @@
 	for (int k = 0; k < TriGrid::GSPACE_SIDELEN; k++) {
 # define GSPACE_ITERATE_END }}}
 
+/*
+ * Takes provided static meshes, pulls their data from GPU buffers, and creates a single continuous mesh from
+ * those meshes. This is used for ant movement/orientation and for building the navmesh in AINav.
+ *
+ * The single mesh (collection of adjacent tris) is divided into grid boxes so that finding them is faster.
+ * In the future, the grid will become less useful. Objects using tri data shouldn't need to look up which
+ * tri they're on at any given time; they should be able to store a protected reference than can be updated
+ * to an adjacent tri when they move to it.
+ *
+ * This adjacent tri lookup will be further useful in making the navmesh more efficient (see
+ * AINav::node_net_spatial_normalization())
+ */
+
 class TriGrid {
 
 public:
@@ -65,7 +78,7 @@ private:
 	TArray<Tri>* tribox_cache[27];
 	TArray<UStaticMeshComponent*> mesh_cmps;
 
-	// stored for demonstration
+	// stored if TRIGRID_DEBUG is defined, otherwise cleared after init
 	TArray<Tri> overlapping_tris;
 	TArray<FIntVector> overlap_tri_boxes;
 	TArray<FVector> dbg_overlapping_tri_intersection_pts;
@@ -127,6 +140,7 @@ private:
 	void generate_polygons(TArray<TArray<PolyPoint>>& poly_points, int overlapping_tri_ct);
 	void generate_tris_from_polygons();
 	void add_new_tris_to_grid();
+	void clear_demo_data();
 
 };
 

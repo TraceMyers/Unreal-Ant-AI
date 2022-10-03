@@ -275,6 +275,10 @@ AINav::NavNode* AINav::find_nearby_node(const FVector& loc, float sq_radius) {
 	return nullptr;
 }
 
+void AINav::kill_pathfinder() const {
+	pathfinder->stop_thread();
+}
+
 void AINav::pathfinding_finished() {
 	if (pathfinder_path_len > 0) { // if success
 		

@@ -79,20 +79,10 @@ void AAntPlayer::Tick(float DeltaTime) {
 
 void AAntPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) {
 	Super::SetupPlayerInputComponent(PlayerInputComponent);
-	PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &AAntPlayer::jump);
-	PlayerInputComponent->BindAction("Attack", IE_Pressed, this, &AAntPlayer::attack);
 	PlayerInputComponent->BindAxis("MoveFB", this, &AAntPlayer::move_fb);
 	PlayerInputComponent->BindAxis("MoveLR", this, &AAntPlayer::move_lr);
 	PlayerInputComponent->BindAxis("LookPan", this, &AAntPlayer::look_pan);
 	PlayerInputComponent->BindAxis("LookTilt", this, &AAntPlayer::look_tilt);
-}
-
-void AAntPlayer::jump() {
-	
-}
-
-void AAntPlayer::attack() {
-	
 }
 
 void AAntPlayer::move_fb(float throttle) {

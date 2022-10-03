@@ -113,6 +113,7 @@ public:
 	NavNode* get_start_node(int key) const;
 	NavNode* find_nearest_node(const FVector& loc);
 	NavNode* find_nearby_node(const FVector& loc, float sq_radius=MIN_SQ_RADIUS);
+	void kill_pathfinder() const;
 	// called by pathfinder
 	void pathfinding_finished();
 	

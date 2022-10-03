@@ -12,6 +12,10 @@ enum DISPATCH_STATUS {
 	DISPATCH_READY
 };
 
+/*
+ * Pathfinding interface for ants.
+ */
+
 UCLASS()
 class ANTFIGHT_API AAntAIDispatch : public AActor {
 	GENERATED_BODY()
@@ -43,7 +47,20 @@ protected:
 	virtual void BeginPlay() override;
 
 private:
-	
+
+// ---------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------:call system
+// ---------------------------------------------------------------------------------------------------------------------
+
+/*
+ * Ants call AAntAIDispatch::get_path(); if AINav::get_path() succeeds, either by finding a cached path or by
+ * initializing pathfinding, data is then stored in a call. WaitingCalls are for ants waiting for pathfinding to finish
+ * and PathingCalls are for ants currently pathing.
+ *
+ * Uses a sparse array system since calls are made and dropped constantly. In the future it might be worth it to test
+ * this implementation against a copy back implementation, but probably not since this system isn't a bottleneck.
+ */
+
 	struct WaitingCall {
     	AAntAI* caller;
     	int path_key;
@@ -59,7 +76,7 @@ private:
     };
 
 	struct CallContainer {
-    	static constexpr int MAX_CALLS = 512;
+    	static constexpr int MAX_CALLS = 128;
     	
     	WaitingCall waiting[MAX_CALLS];
     	PathingCall pathing[MAX_CALLS];
@@ -67,7 +84,6 @@ private:
     	int pc_i;
     	int wc_top;
     	int pc_top;
-
 		
 		CallContainer() {
 			for (int i = 0; i < MAX_CALLS; i++) {
@@ -241,6 +257,8 @@ private:
     		return false;
     	}
     };
+    
+// ---------------------------------------------------------------------------------------------------------------------
 
 	TArray<AAntAI*> ants;
 	TMap<AAntAI*, AINav::NavNode*> ant_nodes;
@@ -250,7 +268,6 @@ private:
 	CallContainer subpath_calls;
 	AINav* ai_nav;
 
-	void dbg_draw_paths() const;
 	FVector* get_valid_path(int key, int& path_len, const FVector& caller_loc, bool copy_backward) const;
-
+	void dbg_draw_paths() const;
 };

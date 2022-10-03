@@ -44,7 +44,7 @@ void AAntAI::BeginPlay() {
 // --------------------------------------------------------------------------------------------------------------:public
 // ---------------------------------------------------------------------------------------------------------------------
 
-// does *this* ant have avoid responsibility in potential collision with other_ant?
+// does this ant have responsibility to avoid a potential collision with other_ant?
 bool AAntAI::has_avoid_responsibility(AAnt* other_ant) {
 	const int i = find_nearby_ant(other_ant);
 	if (i >= 0) {

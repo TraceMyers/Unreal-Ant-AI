@@ -52,10 +52,9 @@ struct TriEdge {
 };
 
 struct PolyPoint {
-	
 	FVector pt;
 	PolyPoint* edge;
-	TArray<int> pending_edges; // yet unknown direction
+	TArray<int> pending_edges; // edge array indices added w/ connection direction yet unknown
 	int tri_edge_flags;
 	static constexpr float EPSILON = 0.1f;
 
@@ -106,8 +105,8 @@ struct Polygon {
 	int mesh_index;
 };
 
+// 10/3/22: a little double precision helps TriGrid::set_point_of_intersection(), seeking as much accuracy as possible.
 struct DoubleVector {
-
 	DoubleVector(double a, double b, double c) : X{a}, Y{b}, Z{c} {}
 	DoubleVector(float a, float b, float c) : X{a}, Y{b}, Z{c} {}
 	DoubleVector(const FVector& vec) : X{vec.X}, Y{vec.Y}, Z{vec.Z} {}

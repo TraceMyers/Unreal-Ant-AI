@@ -27,8 +27,6 @@ void ABPSpawner::spawn_line(const FVector& a, const FVector& b) {
 }
 
 void ABPSpawner::spawn_line_actor(const FVector& a, const FVector& b) {
-	// FVector lifted_a = a + FVector::UpVector * 5.0f;
-	// FVector lifted_b = b + FVector::UpVector * 5.0f;
 	const FVector diff = b - a;
 	const FRotator rot = diff.Rotation();
 	FActorSpawnParameters asp;

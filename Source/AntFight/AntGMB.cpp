@@ -37,6 +37,11 @@ void AAntGMB::Tick(float DeltaSeconds) {
 	ai_nav.tick(DeltaSeconds);
 }
 
+void AAntGMB::EndPlay(EEndPlayReason::Type reason) {
+	ai_nav.kill_pathfinder();
+	Super::EndPlay(reason);
+}
+
 void AAntGMB::ground_mesh_vis() {
 	tri_grid.dbg_toggle_ground_mesh_visibility();
 }

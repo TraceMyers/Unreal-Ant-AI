@@ -69,10 +69,9 @@ uint32 FPathFinder::Run() {
 			break;
 		}
 	}
-
+	// going back to find the start then copying up to length of the path or up to PATH_MAX_LEN.
 	// was previously just copying in backwards, which was fine, but doing it this way
-	// has the benefit of partial paths; this way is: just going back to find the start then
-	// copying up to length of the path or up to PATH_MAX_LEN
+	// has the benefit of partial paths (which work well on GameMap, which is a small, simple map)
 	VNode backward_traveler = search_vector;
 	VNode next_node = backward_traveler->link;
 	while (backward_traveler != start_node) {
@@ -106,9 +105,7 @@ void FPathFinder::Stop() {
 
 // basic A*, running step_ct steps before checking back for thread kill
 bool FPathFinder::search_multistep() {
-	
 	for (int a = 0; a < STEP_CT; a++) {
-		
 		search_stack.RemoveSingle(search_vector);
 		auto& sv_edges = search_vector->edges;
 		auto& sv_weights = search_vector->weights;

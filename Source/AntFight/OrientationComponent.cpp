@@ -11,7 +11,6 @@ void UOrientationComponent::BeginPlay() {
 	Super::BeginPlay();
 }
 
-
 void UOrientationComponent::TickComponent(
 	float DeltaTime,
 	ELevelTick TickType,
@@ -30,7 +29,6 @@ void UOrientationComponent::init(TriGrid* _tri_grid, float _capsule_radius, floa
 
 void UOrientationComponent::get_new_orientation(const FVector& loc, const FVector& up, FQuat& ori, const FVector& move) {
 	if (!tri_grid) {
-		// comm::print("ERROR UOrientationComponent::get_new_orientation(): failure at !tri_grid");
 		return;
 	}
 	if (move.Size() != 0.0f) {
@@ -138,9 +136,6 @@ void UOrientationComponent::find_near_tris(const FVector& loc, const FVector& he
 				found_tri[1] = true;
 			}	
 		}	
-	}
-	if (!found_tri[0] || !found_tri[1]) {
-		// comm::print("WARNING UOrientationComponent::find_near_tris(): failure at near_tris == nullptr");
 	}
 }
 
