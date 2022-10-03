@@ -75,8 +75,6 @@ void AAntPlayer::Tick(float DeltaTime) {
 	Super::Tick(DeltaTime);
 	free_look(DeltaTime);
 	cling_smooth_rotate(DeltaTime);
-	// AAntGMB* ant_gmb = Cast<AAntGMB>(GetWorld()->GetAuthGameMode());
-	// ant_gmb->draw_navmesh(GetActorLocation());
 }
 
 void AAntPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) {

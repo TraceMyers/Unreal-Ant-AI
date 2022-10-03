@@ -3,9 +3,64 @@
 #include "Components/BoxComponent.h"
 #include "Common.h"
 
-// TODO: add some sounds
-// TODO: add basic menus
-// TODO: code cleanup
+AAntAI::AAntAI() {
+	dispatch = nullptr;
+	collis_box = CreateDefaultSubobject<UBoxComponent>("collis box");
+	collis_box->SetupAttachment(skelly_mesh);
+	status = AI_STATUS_INIT_PATH;
+	path_incomplete = false;
+	breadcrumb_ctr = 0.0f;
+	prev_waypoint_breadcrumb_ct = 0;
+	ant_ahead = false;
+	stuck_check_ctr = 0;
+	stuck = false;
+}
+
+void AAntAI::Tick(float delta_time) {
+	set_true_move(delta_time);
+	Super::Tick(delta_time);
+	cling_smooth_rotate(delta_time);
+}
+
+void AAntAI::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) {
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+}
+
+void AAntAI::BeginPlay() {
+	Super::BeginPlay();
+	collis_box->OnComponentBeginOverlap.AddDynamic(this, &AAntAI::on_collis_box_overlap_begin);
+	collis_box->OnComponentEndOverlap.AddDynamic(this, &AAntAI::on_collis_box_overlap_end);
+	sq_capsule_full_height = capsule_full_height * capsule_full_height;
+	avoid_tick_ctr = FMath::RandRange(0, AVOID_TICK_MAX - 1);
+	avoidance_yaw_half_theta = 0.0f;
+	jammed_time = 0.0f;
+	unjam_time = 0.0f;
+	prev_yaw = 0.0f;
+	acceptance_radius = capsule_full_height * 1.5f;
+	breadcrumb_reset();
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------------------------------------:public
+// ---------------------------------------------------------------------------------------------------------------------
+
+// does *this* ant have avoid responsibility in potential collision with other_ant?
+bool AAntAI::has_avoid_responsibility(AAnt* other_ant) {
+	const int i = find_nearby_ant(other_ant);
+	if (i >= 0) {
+		return nearby_ants[i].collision_responsibility;
+	}
+	return false;
+}
+
+const FVector& AAntAI::get_destination() const {
+	return destination;
+}
+
+void AAntAI::reset_nav() {
+	status = AI_STATUS_INIT_PATH;
+	path_incomplete = false;
+}
 
 void AAntAI::on_collis_box_overlap_begin(
 	UPrimitiveComponent* overlapped_comp,
@@ -43,111 +98,9 @@ void AAntAI::on_collis_box_overlap_end(
 	}
 }
 
-bool AAntAI::deal_with_jams(float delta_time) {
-	jammed_time += delta_time;
-	if (jammed_time > JAMMED_MAX) {
-		avoidance_yaw_half_theta = 0.0f;
-		unjam = true;
-		no_accel = false;
-		jammed_time = 0.0f;
-		return true;
-	}
-	return false;
-}
-
-void AAntAI::add_nearby_ant(AAnt* ant, bool collis) {
-	if (nearby_i < MAX_NEARBY) {
-		auto& nearby_ant = nearby_ants[nearby_i];
-		nearby_ant.ant = ant;
-		nearby_ant.collision_responsibility = collis;
-		while (nearby_i < MAX_NEARBY && nearby_ants[nearby_i].ant != nullptr) {
-			nearby_i++;
-		}
-		if (nearby_i > nearby_top) {
-			nearby_top = nearby_i;
-		}
-	}
-}
-
-void AAntAI::remove_nearby_ant(AAnt* ant) {
-	for (int i = 0; i < nearby_top; i++) {
-		if (nearby_ants[i].ant == ant) {
-			nearby_ants[i].ant = nullptr;
-			if (i < nearby_i) {
-				nearby_i = i;
-			}
-			if (nearby_top == i + 1) {
-				do {
-					nearby_top--;
-				}
-				while (nearby_top > 0 && nearby_ants[nearby_top - 1].ant == nullptr);
-			}
-		}
-	}	
-}
-
-int AAntAI::find_nearby_ant(AAnt* ant) const {
-	for (int i = 0; i < nearby_top; i++) {
-		const auto& nearby_ant = nearby_ants[i];
-		if (nearby_ant.ant == ant) {
-			return i;
-		}
-	}
-	return -1;
-}
-
-AAntAI::AAntAI() {
-	dispatch = nullptr;
-	collis_box = CreateDefaultSubobject<UBoxComponent>("collis box");
-	collis_box->SetupAttachment(skelly_mesh);
-	status = AI_STATUS_INIT_PATH;
-	path_incomplete = false;
-	breadcrumb_ctr = 0.0f;
-	prev_waypoint_breadcrumb_ct = 0;
-	ant_ahead = false;
-	stuck_check_ctr = 0;
-	stuck = false;
-}
-
-void AAntAI::Tick(float delta_time) {
-	set_true_move(delta_time);
-	Super::Tick(delta_time);
-	cling_smooth_rotate(delta_time);
-	if (stuck) {
-		dbg_draw_true_move();
-	}
-}
-
-void AAntAI::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) {
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-}
-
-// does *this* ant have avoid responsibility in potential collision with other_ant?
-bool AAntAI::has_avoid_responsibility(AAnt* other_ant) {
-	const int i = find_nearby_ant(other_ant);
-	if (i >= 0) {
-		return nearby_ants[i].collision_responsibility;
-	}
-	return false;
-}
-
-const FVector& AAntAI::get_destination() const {
-	return destination;
-}
-
-void AAntAI::BeginPlay() {
-	Super::BeginPlay();
-	collis_box->OnComponentBeginOverlap.AddDynamic(this, &AAntAI::on_collis_box_overlap_begin);
-	collis_box->OnComponentEndOverlap.AddDynamic(this, &AAntAI::on_collis_box_overlap_end);
-	sq_capsule_full_height = capsule_full_height * capsule_full_height;
-	avoid_tick_ctr = FMath::RandRange(0, AVOID_TICK_MAX - 1);
-	avoidance_yaw_half_theta = 0.0f;
-	jammed_time = 0.0f;
-	unjam_time = 0.0f;
-	prev_yaw = 0.0f;
-	acceptance_radius = capsule_full_height * 1.5f;
-	breadcrumb_reset();
-}
+// ---------------------------------------------------------------------------------------------------------------------
+// -----------------------------------------------------------------------------------------------------:move and rotate
+// ---------------------------------------------------------------------------------------------------------------------
 
 void AAntAI::set_true_move(float delta_time) {
 	const FVector& prev_true_move = true_move;
@@ -210,9 +163,8 @@ void AAntAI::set_true_move(float delta_time) {
 		else {
 			PATH_KEEP_MOVING:
 			// todo: check if true move is too close to normal for too long, say stuck
-			const FVector waypoint_diff = cur_waypoint - cur_loc;
 			FVector intended_move = (cur_waypoint - cur_loc).GetSafeNormal();
-			correct_intended_move(intended_move, cur_loc);
+			rotate_move_vec_onto_mesh_plane(intended_move, cur_loc);
 			
 			if (unjam) {
 				true_move = intended_move;
@@ -269,7 +221,7 @@ void AAntAI::set_true_move(float delta_time) {
 			else {
 				RETRACE_KEEP_MOVING:
 				true_move = (cur_waypoint - cur_loc).GetSafeNormal();
-				correct_intended_move(true_move, cur_loc);	
+				rotate_move_vec_onto_mesh_plane(true_move, cur_loc);	
 			}
 			calculate_rot_speed_penalty(prev_true_move);
 		}
@@ -281,10 +233,9 @@ void AAntAI::cling_smooth_rotate(float delta_time) {
 	Super::cling_smooth_rotate(delta_time);
 }
 
-void AAntAI::reset_nav() {
-	status = AI_STATUS_INIT_PATH;
-	path_incomplete = false;
-}
+// ---------------------------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------:collision avoidance
+// ---------------------------------------------------------------------------------------------------------------------
 
 void AAntAI::avoid_collisions(float delta_time) {
 	// *try* to avoid collisions. just do your best, little ant.
@@ -347,9 +298,6 @@ void AAntAI::avoid_collisions(float delta_time) {
 					avoidance_yaw_half_theta += AYHT_STEP * delta_time;
 					added_steering = true;
 				}
-				// else if (ground_speed > THREE_QUARTER_MAX_GROUND_SPEED) {
-				// 	ground_speed = THREE_QUARTER_MAX_GROUND_SPEED;
-				// }
 			}
 			else {
 				// to the left, to the left
@@ -357,9 +305,6 @@ void AAntAI::avoid_collisions(float delta_time) {
 					avoidance_yaw_half_theta -= AYHT_STEP * delta_time;
 					added_steering = true;
 				}
-				// else if (ground_speed > THREE_QUARTER_MAX_GROUND_SPEED) {
-				// 	ground_speed = THREE_QUARTER_MAX_GROUND_SPEED;
-				// }
 			}
 		}
 		else if (possible_collision(nearby_ant.ant) == 1 && ground_speed > THREE_QUARTER_MAX_GROUND_SPEED) {
@@ -386,7 +331,6 @@ void AAntAI::avoid_collisions(float delta_time) {
 	}
 }
 
-
 int AAntAI::possible_collision(AAnt* other_ant) const {
 	// dead simple occasionally correct future collision check
 	// avoiding sphere intersection math
@@ -399,14 +343,6 @@ int AAntAI::possible_collision(AAnt* other_ant) const {
 		}
 	}
 	return 0;
-}
-
-void AAntAI::set_steering_tr_starts() {
-	const FVector& cur_loc = forward_positions[0];
-	const FVector true_move_right_scaled = FVector::CrossProduct(true_move, get_mesh_up()) * capsule_radius;
-	const FVector true_move_scaled = true_move * capsule_half_height;
-	steering_tr_starts[0] = cur_loc + true_move_right_scaled + true_move_scaled;
-	steering_tr_starts[1] = cur_loc - true_move_right_scaled + true_move_scaled;
 }
 
 bool AAntAI::center_correct_ayht(float delta_time) {
@@ -436,8 +372,53 @@ void AAntAI::set_avoidance_rot() {
 	avoidance_rot.W = FMath::Cos(avoidance_yaw_half_theta);
 }
 
-void AAntAI::nonground_collis_check() {
-	
+bool AAntAI::deal_with_jams(float delta_time) {
+	jammed_time += delta_time;
+	if (jammed_time > JAMMED_MAX) {
+		avoidance_yaw_half_theta = 0.0f;
+		unjam = true;
+		no_accel = false;
+		jammed_time = 0.0f;
+		return true;
+	}
+	return false;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------------:path retracing
+// ---------------------------------------------------------------------------------------------------------------------
+
+void AAntAI::drop_breadcrumbs(float delta_time) {
+	breadcrumb_ctr += delta_time;
+	if (breadcrumb_ctr > BREADCRUMB_DT) {
+		breadcrumb_ctr = 0.0f;
+		prev_waypoint_breadcrumb_ct++;
+		breadcrumbs[breadcrumb_i++] = GetActorLocation();
+		if (breadcrumb_i >= BREADCRUMB_CT) {
+			breadcrumb_i = 0;
+		}
+	}
+}
+
+void AAntAI::breadcrumb_reset() {
+	breadcrumb_ctr = 0.0f;
+	prev_waypoint_breadcrumb_ct = 1;
+	breadcrumbs[breadcrumb_i++] = GetActorLocation();
+	if (breadcrumb_i >= BREADCRUMB_CT) {
+		breadcrumb_i = 0;
+	}
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------------------:setters
+// ---------------------------------------------------------------------------------------------------------------------
+
+void AAntAI::set_steering_tr_starts() {
+	const FVector& cur_loc = forward_positions[0];
+	const FVector true_move_right_scaled = FVector::CrossProduct(true_move, get_mesh_up()) * capsule_radius;
+	const FVector true_move_scaled = true_move * capsule_half_height;
+	steering_tr_starts[0] = cur_loc + true_move_right_scaled + true_move_scaled;
+	steering_tr_starts[1] = cur_loc - true_move_right_scaled + true_move_scaled;
 }
 
 void AAntAI::set_step_retrace() {
@@ -470,33 +451,12 @@ void AAntAI::calculate_rot_speed_penalty(const FVector& prev_true_move) {
 	}
 }
 
-void AAntAI::drop_breadcrumbs(float delta_time) {
-	breadcrumb_ctr += delta_time;
-	if (breadcrumb_ctr > BREADCRUMB_DT) {
-		breadcrumb_ctr = 0.0f;
-		prev_waypoint_breadcrumb_ct++;
-		breadcrumbs[breadcrumb_i++] = GetActorLocation();
-		if (breadcrumb_i >= BREADCRUMB_CT) {
-			breadcrumb_i = 0;
-		}
-	}
-}
-
-void AAntAI::breadcrumb_reset() {
-	breadcrumb_ctr = 0.0f;
-	prev_waypoint_breadcrumb_ct = 1;
-	breadcrumbs[breadcrumb_i++] = GetActorLocation();
-	if (breadcrumb_i >= BREADCRUMB_CT) {
-		breadcrumb_i = 0;
-	}
-}
-
-void AAntAI::correct_intended_move(FVector& intended_move, const FVector& cur_loc) const {
+void AAntAI::rotate_move_vec_onto_mesh_plane(FVector& move_vec, const FVector& cur_loc) const {
 	const FVector mesh_up = get_mesh_up();
 	const float half_mesh_plane_theta =
-		(HALF_PI - FMath::Acos(FVector::DotProduct(mesh_up, intended_move))) * 0.5f;
+		(HALF_PI - FMath::Acos(FVector::DotProduct(mesh_up, move_vec))) * 0.5f;
 	const float angle_sin = FMath::Sin(half_mesh_plane_theta);
-	const FVector rot_axis = FVector::CrossProduct(mesh_up, intended_move).GetSafeNormal();
+	const FVector rot_axis = FVector::CrossProduct(mesh_up, move_vec).GetSafeNormal();
 	const FVector rot_axis_and_angle = rot_axis * angle_sin;
 	FQuat rot_quat(
 		rot_axis_and_angle.X,
@@ -505,5 +465,50 @@ void AAntAI::correct_intended_move(FVector& intended_move, const FVector& cur_lo
 		FMath::Cos(half_mesh_plane_theta)
 	);
 	rot_quat.Normalize();
-	intended_move = rot_quat.RotateVector(intended_move);
+	move_vec = rot_quat.RotateVector(move_vec);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------:nearby ant tracking
+// ---------------------------------------------------------------------------------------------------------------------
+
+void AAntAI::add_nearby_ant(AAnt* ant, bool collis) {
+	if (nearby_i < MAX_NEARBY) {
+		auto& nearby_ant = nearby_ants[nearby_i];
+		nearby_ant.ant = ant;
+		nearby_ant.collision_responsibility = collis;
+		while (nearby_i < MAX_NEARBY && nearby_ants[nearby_i].ant != nullptr) {
+			nearby_i++;
+		}
+		if (nearby_i > nearby_top) {
+			nearby_top = nearby_i;
+		}
+	}
+}
+
+void AAntAI::remove_nearby_ant(AAnt* ant) {
+	for (int i = 0; i < nearby_top; i++) {
+		if (nearby_ants[i].ant == ant) {
+			nearby_ants[i].ant = nullptr;
+			if (i < nearby_i) {
+				nearby_i = i;
+			}
+			if (nearby_top == i + 1) {
+				do {
+					nearby_top--;
+				}
+				while (nearby_top > 0 && nearby_ants[nearby_top - 1].ant == nullptr);
+			}
+		}
+	}	
+}
+
+int AAntAI::find_nearby_ant(AAnt* ant) const {
+	for (int i = 0; i < nearby_top; i++) {
+		const auto& nearby_ant = nearby_ants[i];
+		if (nearby_ant.ant == ant) {
+			return i;
+		}
+	}
+	return -1;
 }

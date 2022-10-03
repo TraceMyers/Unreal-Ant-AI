@@ -37,10 +37,6 @@ void AAntGMB::Tick(float DeltaSeconds) {
 	ai_nav.tick(DeltaSeconds);
 }
 
-void AAntGMB::draw_navmesh(const FVector& near_loc) {
-	ai_nav.dbg_draw_navmesh(near_loc);
-}
-
 void AAntGMB::ground_mesh_vis() {
 	tri_grid.dbg_toggle_ground_mesh_visibility();
 }

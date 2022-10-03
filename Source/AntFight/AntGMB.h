@@ -20,8 +20,6 @@ class ANTFIGHT_API AAntGMB : public AGameModeBase {
 	
 public:
 
-	void draw_navmesh(const FVector& near_loc);
-	
 	TriGrid* get_tri_grid();
 
 private:

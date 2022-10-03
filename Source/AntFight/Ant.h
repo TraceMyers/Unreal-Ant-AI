@@ -11,29 +11,38 @@ class ANTFIGHT_API AAnt : public ACharacter {
 public:
 	
 	static constexpr int FORWARD_POSITION_CT = 3;
+	class AAntAIDispatch* dispatch;
+	class UAntGI* game_instance;
+	
+	UPROPERTY(BlueprintReadOnly)
+	USceneComponent* mesh_cling;
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
+	USkeletalMeshComponent* skelly_mesh;
+	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
+	class UBoxComponent* cling_box;
+	UPROPERTY()
+	class UOrientationComponent* orientation_cmp;
+	UPROPERTY(BlueprintReadWrite, VisibleInstanceOnly)
+	float ground_speed;
+	UPROPERTY(BlueprintReadWrite, VisibleInstanceOnly)
+	float direction;
 	
 	AAnt();
 	~AAnt();
-	
 	virtual void Tick(float DeltaTime) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
-
-	void move(float delta_time);
-	void rotate_while_moving(float delta_time, const FVector& move_vec);
-	void set_on_ground();
-	void fall(float delta_time);
-	void fall_init();
-	bool try_move_on_ground(const FVector& move, float delta_time, bool accel=true);
+	
+	void set_dispatch(class AAntAIDispatch* dispatch);
     virtual bool has_avoid_responsibility(AAnt* other_ant);
-	virtual float get_ground_speed() const;
-    virtual const FVector& get_true_move();
 	void update_forward_positions();
 	const FVector* get_forward_positions();
-	void set_dispatch(class AAntAIDispatch* dispatch);
-	void resolve_overlaps(float delta_time);
+	
+	virtual const FVector& get_true_move();
+	virtual float get_ground_speed() const;
 	FVector get_mesh_right() const;
 	FVector get_mesh_up() const;
 	FVector get_mesh_forward() const;
+	
 	
 	UFUNCTION()
 	void on_capsule_overlap_begin(
@@ -52,21 +61,6 @@ public:
 		int32 other_body_index
 	);
 	
-	UPROPERTY(BlueprintReadOnly)
-	USceneComponent* mesh_cling;
-	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
-	USkeletalMeshComponent* skelly_mesh;
-	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
-	class UBoxComponent* cling_box;
-	UPROPERTY()
-	class UOrientationComponent* orientation_cmp;
-	UPROPERTY(BlueprintReadWrite, VisibleInstanceOnly)
-	float ground_speed;
-	UPROPERTY(BlueprintReadWrite, VisibleInstanceOnly)
-	float direction;
-	
-	class AAntAIDispatch* dispatch;
-	class UAntGI* game_instance;
 	
 protected:
 	
@@ -101,7 +95,6 @@ protected:
 	virtual void BeginPlay() override;
 	virtual void set_true_move(float delta_time);
 	virtual void cling_smooth_rotate(float delta_time);
-	void dbg_draw_true_move();
 	// If an ant falls off the map, we just teleport it to a safe location on the map underside.
 	// Appears to be no longer necessary during testing, but will avoid a potential crash since ant references
 	// are not yet properly handled when they are killed.
@@ -111,6 +104,15 @@ private:
 
 	TArray<AAnt*> overlapping_ants;
 	TArray<class AStaticMeshActor*> overlapping_meshes;
-
+	
+	void move(float delta_time);
+	bool try_move_on_ground(const FVector& move, float delta_time, bool accel=true);
+	void rotate_while_moving(float delta_time, const FVector& move_vec);
+	void fall(float delta_time);
+	void fall_init();
+	void set_on_ground();
+	// the only collision resolution code. simple, not very good
+	void resolve_overlaps(float delta_time);
+	
 };
 

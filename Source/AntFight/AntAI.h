@@ -9,10 +9,26 @@ class ANTFIGHT_API AAntAI : public AAnt {
 	GENERATED_BODY()
 
 public:
-
+	
+	enum AI_STATUS {
+		AI_STATUS_INIT_PATH,
+		AI_STATUS_WAITING,
+		AI_STATUS_PATHING,
+		AI_STATUS_RETRACING
+	} status;
+	
 	UPROPERTY(BlueprintReadWrite, EditDefaultsOnly)
 	UBoxComponent* collis_box;
 	
+	
+
+	AAntAI();
+	virtual void Tick(float delta_time) override;
+	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+	virtual bool has_avoid_responsibility(AAnt* other_ant) override;
+	const FVector& get_destination() const;
+	// as of 9/28/2022, only called by AAnt::fix_fall_through()
+	void reset_nav();
 	UFUNCTION()
 	void on_collis_box_overlap_begin(
 		UPrimitiveComponent* overlapped_comp,
@@ -29,22 +45,6 @@ public:
 		class UPrimitiveComponent* other_comp,
 		int32 other_body_index
 	);
-	
-	
-	enum AI_STATUS {
-		AI_STATUS_INIT_PATH,
-		AI_STATUS_WAITING,
-		AI_STATUS_PATHING,
-		AI_STATUS_RETRACING
-	} status;
-
-	AAntAI();
-	virtual void Tick(float delta_time) override;
-	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
-	virtual bool has_avoid_responsibility(AAnt* other_ant) override;
-	const FVector& get_destination() const;
-	// as of 9/28/2022, only called by AAnt::fix_fall_through()
-	void reset_nav();
 
 protected:
 
@@ -55,11 +55,10 @@ protected:
 private:
 	
 	struct NearbyAnt {
-
-		NearbyAnt() : ant(nullptr), collision_responsibility(false) {}
-		
     	AAnt* ant;
 		bool collision_responsibility;
+		
+		NearbyAnt() : ant(nullptr), collision_responsibility(false) {}
 
 		NearbyAnt(AAnt* _ant, bool _collision_responsibility) {
 			ant = _ant;
@@ -69,7 +68,6 @@ private:
 		bool operator == (const NearbyAnt& b) const {
 			return (*this).ant == b.ant;
 		}
-
     };
 
 	static constexpr int MDC_LEN = 5;
@@ -124,19 +122,23 @@ private:
 	float stuck_check_ctr;
 	bool stuck;
 	int waypoint_ctr;
-
+	
 	void avoid_collisions(float delta_time);
 	int possible_collision(AAnt* other_ant) const;
-	void set_steering_tr_starts();
 	bool center_correct_ayht(float delta_time);
 	void set_avoidance_rot();
-	void nonground_collis_check();
-	void set_step_retrace();
-	void calculate_rot_speed_penalty(const FVector& prev_true_move);
+	bool deal_with_jams(float delta_time);
+
+	// breadcrumbs are used when an ant runs into a static mesh that is not part of the navmesh in order to retrace
+	// their steps to the last known good location.
 	void drop_breadcrumbs(float delta_time);
 	void breadcrumb_reset();
-	void correct_intended_move(FVector& intended_move, const FVector& cur_loc) const;
-	bool deal_with_jams(float delta_time);
+	
+	void set_steering_tr_starts();
+	void set_step_retrace();
+	void calculate_rot_speed_penalty(const FVector& prev_true_move);
+	void rotate_move_vec_onto_mesh_plane(FVector& move_vec, const FVector& cur_loc) const;
+	
 	void add_nearby_ant(AAnt* ant, bool collis);
 	void remove_nearby_ant(AAnt* ant);
 	int find_nearby_ant(AAnt* ant) const;
