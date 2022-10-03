@@ -1,5 +1,4 @@
 #include "Ant.h"
-
 #include "AntAI.h"
 #include "AntGI.h"
 #include "AntAIDispatch.h"
@@ -87,7 +86,6 @@ void AAnt::Tick(float DeltaTime) {
 		fall(DeltaTime);
 	}
 	fix_fall_through();
-	// dbg_draw_true_move();
 }
 
 void AAnt::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) {

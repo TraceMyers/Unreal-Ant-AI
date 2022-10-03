@@ -17,7 +17,6 @@ void ALine::BeginPlay() {
 }
 
 void ALine::BeginDestroy() {
-	// comm::print("destroying line");
 	Super::BeginDestroy();
 }
 

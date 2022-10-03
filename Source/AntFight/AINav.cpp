@@ -29,6 +29,10 @@ AINav::~AINav() {
 	}
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------------------------------------:public
+// ---------------------------------------------------------------------------------------------------------------------
+
 void AINav::build_graph(UWorld* _world, TriGrid* tri_grid) {
 	world = _world;
 	inv_gbox_world_dims = tri_grid->get_inv_gbox_world_dims();
@@ -55,31 +59,6 @@ void AINav::tick(float delta_time) {
 	}
 }
 
-void AINav::dbg_draw_navmesh(const FVector& loc) {
-	uint32 box_ct;
-	const auto graph_boxes = get_nearby_graph_boxes(loc, box_ct);
-	if (graph_boxes == nullptr) {
-		return;
-	}
-	TArray<TPair<NavNode*, NavNode*>> node_pairs;
-	for (uint32 i = 0; i < box_ct; i++) {
-		auto& graph_box = *graph_boxes[i];
-		for (int j = 0; j < graph_box.Num(); j++) {
-			NavNode& node = graph_box[j];
-			DrawDebugCircle(world, node.location, 2.0f, 3, FColor::Red);
-			for (int n = 0; n < node.edges.Num(); n++) {
-				NavNode* node_edge = node.edges[n];
-				TPair<NavNode*, NavNode*> pair_a(&node, node_edge);
-				TPair<NavNode*, NavNode*> pair_b(node_edge, &node);
-				if (node_pairs.Find(pair_a) >= 0 || node_pairs.Find(pair_b) >= 0) {
-					continue;
-				}
-				DrawDebugLine(world, node.location, node_edge->location, FColor::Blue, false, -1, 0, 1.0f);
-				node_pairs.Add(pair_a);
-			}
-		}
-	}
-}
 
 int AINav::find_path(
 	const FVector& from,
@@ -202,14 +181,6 @@ int AINav::find_path(
 	return -1;
 }
 
-AINav::AI_PATH_STATUS AINav::get_path_status(int key) const {
-#ifdef AINAV_DEBUG
-	check(key >= 0 && key < PATH_CACHE_LEN);
-#endif
-	// comm::print("checking on %d, which is set to %d", key, path_statuses[key]);
-	return path_statuses[key];
-}
-
 FVector* AINav::get_path(int key, int& path_len) {
 #ifdef AINAV_DEBUG
 	check(key >= 0 && key < PATH_CACHE_LEN);
@@ -221,37 +192,23 @@ FVector* AINav::get_path(int key, int& path_len) {
 	return nullptr;
 }
 
-AINav::NavNode* AINav::get_end_node(int key) const {
-	return end_nodes[key];
-}
-
-AINav::NavNode* AINav::get_start_node(int key) const {
-	return start_nodes[key];
+AINav::AI_PATH_STATUS AINav::get_path_status(int key) const {
+#ifdef AINAV_DEBUG
+	check(key >= 0 && key < PATH_CACHE_LEN);
+#endif
+	return path_statuses[key];
 }
 
 bool AINav::path_is_complete(int key) const {
 	return path_complete[key];
 }
 
-void AINav::pathfinding_finished() {
-	if (pathfinder_path_len > 0) { // if success
-		
-#ifdef AINAV_DEBUG
-		update_time_test(AINav::TTC_PATHFINDER_END);
-#endif
+AINav::NavNode* AINav::get_end_node(int key) const {
+	return end_nodes[key];
+}
 
-		path_keep_alive[cache_write_i] = KEEP_ALIVE_TIME;
-		smooth_path(cache_write_i, pathfinder_path_len);
-		start_nodes[cache_write_i] = pathfinder_buf[0];
-		end_nodes[cache_write_i] = pathfinder_buf[pathfinder_path_len - 1];
-		path_complete[cache_write_i] = full_path_found;
-		path_statuses[cache_write_i] = AI_PATH_READY;
-	}
-	else {
-		path_statuses[cache_write_i] = AI_PATH_FREE;
-	}
-	cache_write_i = cache_write_i == PATH_CACHE_LEN - 1 ? 0 : cache_write_i + 1;
-	pathfinding = false;
+AINav::NavNode* AINav::get_start_node(int key) const {
+	return start_nodes[key];
 }
 
 AINav::NavNode* AINav::find_nearest_node(const FVector& loc) {
@@ -286,179 +243,120 @@ AINav::NavNode* AINav::find_nearest_node(const FVector& loc) {
 	return nearest_node;
 }
 
-void AINav::dbg_draw_graph() {
-	GSPACE_ITERATE_START
-	auto& box_nodes = nav_graph[i][j][k];
-	TArray<TPair<NavNode*, NavNode*>> node_pairs;
-	for (int m = 0; m < box_nodes.Num(); m++) {
-		auto& node = box_nodes[m];
-		DrawDebugCircle(world, node.location, 2.0f, 3, FColor::Red);
-		for (int n = 0; n < node.edges.Num(); n++) {
-			NavNode* node_edge = node.edges[n];
-			TPair<NavNode*, NavNode*> pair_a(&node, node_edge);
-			TPair<NavNode*, NavNode*> pair_b(node_edge, &node);
-			if (node_pairs.Find(pair_a) >= 0 || node_pairs.Find(pair_b) >= 0) {
-				continue;
-			}
-			DrawDebugLine(world, node.location, node_edge->location, FColor::Blue, false, -1, 0, 1.0f);
-			node_pairs.Add(pair_a);
-		}
+AINav::NavNode* AINav::find_nearby_node(const FVector& loc, float sq_radius) {
+#ifdef AINAV_DEBUG
+	check(sq_radius >= MIN_SQ_RADIUS);
+#endif
+	uint32 box_ct;
+	const auto graph_boxes = get_nearby_graph_boxes(loc, box_ct);
+	if (graph_boxes == nullptr) {
+		return nullptr;
 	}
-	GSPACE_ITERATE_END
-}
-
-void AINav::dbg_draw_normals() {
-	GSPACE_ITERATE_START
-	auto& box_nodes = nav_graph[i][j][k];
-	for (int m = 0; m < box_nodes.Num(); m++) {
-		auto& node = box_nodes[m];
-		DrawDebugLine(world, node.location, node.location + node.normal * 5.0f, FColor::Blue, false, -1, 0, 1.0f);
-	}
-	GSPACE_ITERATE_END
-}
-
-int AINav::find_cached_path(const FVector& from, const FVector& to, bool& copy_backward) const {
-	for (int i = 0; i < PATH_CACHE_LEN; i++) {
-		const FVector& path_start  = smoothed_path_cache[i][0];
-		const FVector& path_end = smoothed_path_cache[i][path_lens[i] - 1];
-		if (path_statuses[i] == AI_PATH_READY) {
-			if (path_match(from, to, path_start, path_end)) {
-				return i;
-			}
-			if (path_match(from, to, path_end, path_start)) {
-				copy_backward = true;
-				return i;
+	for (uint32 i = 0; i < box_ct; i++) {
+		auto& graph_box = *graph_boxes[i];
+		for (int j = 0; j < graph_box.Num(); j++) {
+			NavNode& node = graph_box[j];
+			const FVector diff = node.location - loc;
+			const float sq_dist = diff.SizeSquared();
+			if (sq_dist <= sq_radius) {
+				const FVector offset = node.normal * 0.1f;
+				const FVector tr_start = loc + offset;
+				const FVector tr_end = node.location + offset;
+				if (
+					comm::trace_hit_static_actor(tr_start, tr_end) > 0.0f 
+					|| comm::trace_hit_static_actor(tr_end, tr_start) > 0.0f
+				) {
+					continue;
+				}
+				return &node;
 			}
 		}
 	}
-	return -1;
+	return nullptr;
 }
 
-int AINav::find_cached_path_start_rad(
-	const FVector& from,
-	const FVector& to,
-	bool& copy_backward,
-	float start_rad
-) const {
-	for (int i = 0; i < PATH_CACHE_LEN; i++) {
-		const FVector& path_start  = smoothed_path_cache[i][0];
-		const FVector& path_end = smoothed_path_cache[i][path_lens[i] - 1];
-		if (path_statuses[i] == AI_PATH_READY) {
-			if (path_match_start_rad(from, to, path_start, path_end, start_rad)) {
-				return i;
-			}
-			if (path_match_end_rad(from, to, path_end, path_start, start_rad)) {
-				copy_backward = true;
-				return i;
-			}
+void AINav::pathfinding_finished() {
+	if (pathfinder_path_len > 0) { // if success
+		
+#ifdef AINAV_DEBUG
+		update_time_test(AINav::TTC_PATHFINDER_END);
+#endif
+
+		path_keep_alive[cache_write_i] = KEEP_ALIVE_TIME;
+		smooth_path(cache_write_i, pathfinder_path_len);
+		start_nodes[cache_write_i] = pathfinder_buf[0];
+		end_nodes[cache_write_i] = pathfinder_buf[pathfinder_path_len - 1];
+		path_complete[cache_write_i] = full_path_found;
+		path_statuses[cache_write_i] = AI_PATH_READY;
+	}
+	else {
+		path_statuses[cache_write_i] = AI_PATH_FREE;
+	}
+	cache_write_i = cache_write_i == PATH_CACHE_LEN - 1 ? 0 : cache_write_i + 1;
+	pathfinding = false;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------------------:private
+// ---------------------------------------------------------------------------------------------------------------------
+
+
+// ---------------------------------------------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------------------------------:init helpers
+// ---------------------------------------------------------------------------------------------------------------------
+
+inline TArray<AINav::InitNode>& AINav::get_node_box(void* init_nodes, int _i, int _j, int _k) {
+	return *((TArray<InitNode>*)init_nodes + _i * GSPACE_SIDELEN_SQ + _j * GSPACE_SIDELEN + _k);
+}
+
+bool AINav::get_alike_edge(const FVector* pts_a, const FVector* pts_b, int& indices) {
+	uint32 flags = 0;
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 3; j++) {
+			if (pts_a[i] == pts_b[j]) {
+				if (flags == 0) {
+					flags |= 1 << i;
+					flags |= 1 << (j + 8);
+					break;
+				}
+				if (flags & TRI_1_A) {
+					if (i == 1) {
+						indices = TRI_1_AB;
+					}
+					else { 
+						indices = TRI_1_CA;	
+					}
+				}
+				else {
+					indices	= TRI_1_BC;
+				}
+				if (flags & TRI_2_A) {
+					if (j == 1) { 
+						indices |= TRI_2_AB;
+					}
+					else { 
+						indices |= TRI_2_CA;	
+					}
+				}
+				else { 
+					indices |= TRI_2_BC;	
+				}
+				return true;
+			}	
 		}
 	}
-	return -1;
+	return false;
 }
 
-int AINav::find_cached_path_end_rad(
-	const FVector& from,
-	const FVector& to,
-	bool& copy_backward,
-	float end_rad
-) const {
-	for (int i = 0; i < PATH_CACHE_LEN; i++) {
-		const FVector& path_start  = smoothed_path_cache[i][0];
-		const FVector& path_end = smoothed_path_cache[i][path_lens[i] - 1];
-		if (path_statuses[i] == AI_PATH_READY) {
-			if (path_match_end_rad(from, to, path_start, path_end, end_rad)) {
-				return i;
-			}
-			// if (path_match_start_rad(from, to, path_end, path_start, end_rad)) {
-			// 	copy_backward = true;
-			// 	return i;
-			// }
-		}
-	}
-	return -1;
-}
-
-int AINav::find_cached_path_two_rad(
-	const FVector& from,
-	const FVector& to,
-	bool& copy_backward,
-	float start_rad,
-	float end_rad
-) const {
-	for (int i = 0; i < PATH_CACHE_LEN; i++) {
-		const FVector& path_start  = smoothed_path_cache[i][0];
-		const FVector& path_end = smoothed_path_cache[i][path_lens[i] - 1];
-		if (path_statuses[i] == AI_PATH_READY) {
-			if (path_match_two_rad(from, to, path_start, path_end, start_rad, end_rad)) {
-				return i;
-			}
-			if (path_match_two_rad(from, to, path_end, path_start, start_rad, end_rad)) {
-				copy_backward = true;
-				return i;
-			}
-		}
-	}
-	return -1;
-}
-
-bool AINav::path_match_two_rad(
-	const FVector& from,
-	const FVector& to,
-	const FVector& path_a,
-	const FVector& path_b,
-	float start_radius,
-	float end_radius
-) {
+// there are up to 26 boxes surrounding a grid box; this encodes the other box's relative position as a single number
+// (also encodes same position as 0)
+// (... basically just linear storage position difference math)
+int AINav::cross_connection_encoding(const FIntVector& grid_xyz, const FIntVector& grid_ijk) {
 	return (
-		(
-			from == path_a
-			|| (from - path_a).SizeSquared() < start_radius
-		) && (
-			to == path_b
-			|| (to - path_b).SizeSquared() < end_radius
-		)
+		9 * (grid_xyz.X - grid_ijk.X)
+		+ 3 * (grid_xyz.Y - grid_ijk.Y)
+		+ (grid_xyz.Z - grid_ijk.Z)
 	);
-}
-
-bool AINav::path_match_start_rad(
-	const FVector& from,
-	const FVector& to,
-	const FVector& path_a,
-	const FVector& path_b,
-	float start_radius
-) {
-	return (
-		(
-			from == path_a
-			|| (from - path_a).SizeSquared() < start_radius
-		)
-		&& to == path_b
-	);
-}
-
-bool AINav::path_match_end_rad(
-	const FVector& from,
-	const FVector& to,
-	const FVector& path_a,
-	const FVector& path_b,
-	float end_radius
-) {
-	return (
-		from == path_a
-		&& (
-			to == path_b
-			|| (to - path_b).SizeSquared() < end_radius
-		)
-	);
-}
-
-bool AINav::path_match(
-	const FVector& from,
-	const FVector& to,
-	const FVector& path_a,
-	const FVector& path_b
-) {
-	return from == path_a && to == path_b;	
 }
 
 void AINav::init_node_net(TriGrid* tri_grid, void* grid_nodes) {
@@ -627,58 +525,19 @@ void AINav::filter_node_net(void* init_nodes) {
 	comm::print("total remove ct: %d", total_remove_ct);
 }
 
-bool AINav::get_alike_edge(const FVector* pts_a, const FVector* pts_b, int& indices) {
-	uint32 flags = 0;
-	for (int i = 0; i < 3; i++) {
-		for (int j = 0; j < 3; j++) {
-			if (pts_a[i] == pts_b[j]) {
-				if (flags == 0) {
-					flags |= 1 << i;
-					flags |= 1 << (j + 8);
-					break;
-				}
-				if (flags & TRI_1_A) {
-					if (i == 1) {
-						indices = TRI_1_AB;
-					}
-					else { 
-						indices = TRI_1_CA;	
-					}
-				}
-				else {
-					indices	= TRI_1_BC;
-				}
-				if (flags & TRI_2_A) {
-					if (j == 1) { 
-						indices |= TRI_2_AB;
-					}
-					else { 
-						indices |= TRI_2_CA;	
-					}
-				}
-				else { 
-					indices |= TRI_2_BC;	
-				}
-				return true;
-			}	
-		}
-	}
-	return false;
-}
-
-// there are up to 26 boxes surrounding a grid box; this encodes the other box's relative position as a single number
-// (also encodes same position as 0)
-// (... basically just linear storage position difference math)
-int AINav::cross_connection_encoding(const FIntVector& grid_xyz, const FIntVector& grid_ijk) {
-	return (
-		9 * (grid_xyz.X - grid_ijk.X)
-		+ 3 * (grid_xyz.Y - grid_ijk.Y)
-		+ (grid_xyz.Z - grid_ijk.Z)
-	);
-}
-
-inline TArray<AINav::InitNode>& AINav::get_node_box(void* init_nodes, int _i, int _j, int _k) {
-	return *((TArray<InitNode>*)init_nodes + _i * GSPACE_SIDELEN_SQ + _j * GSPACE_SIDELEN + _k);
+void AINav::node_net_spatial_normalization(void* init_nodes) {
+	// - start at good candidate node (normal not in-line with y axis or x axis)
+	// - rotate world x-axis onto node's tri plane. move in that direction until reaching edge
+	// rotate movement vector onto next tri with no y axis component. continue moving until reaching distance decided
+	// by parameter. drop a node, connect to prev.
+	// - continue until either can no longer, or a loop is mode.
+	// - for each node in net, do the same as before, but starting with y-axis.
+	// - any node that has not yet explored either axis should do so
+	// - if dist < intended node dist, but the normal theta delta since starting is great enough, drop a node.
+	// - if a node is near enough to an edge or node and passes line test, either connect to the other node or create
+	// - a new node on the edge and connect to that.
+	// - if a node is nearer and all edge collision tests pass, merge nodes.
+	// - for any init_nodes that are not 'covered' by new net, drop a new node there and repeat the process
 }
 
 void AINav::set_nav_graph(void* init_nodes) {
@@ -695,9 +554,8 @@ void AINav::set_nav_graph(void* init_nodes) {
 		// TODO: change once initnode locs are set
 		NavNode nav_node (init_node);
 		// Hacky magic number used here to push the nodes above the mesh, since ants do a trace hit test
-		// to check whether or not they've reached their waypoint. My current idea of how to make this better
-		// is just to make it a parameter than can be changed within the editor. Ideally, the line testing
-		// used to cull nodes would stop occasionally allowing bad nodes.
+		// to check whether or not they've reached their waypoint. Ideally, the line testing used to cull nodes would
+		// stop occasionally allowing bad nodes.
 		nav_node.location = init_node.tri->center + init_node.tri->normal * 5.0f; 
 		nav_nodes.Add(nav_node);
 	}
@@ -728,37 +586,9 @@ void AINav::set_nav_graph(void* init_nodes) {
 	GSPACE_ITERATE_END
 }
 
-AINav::NavNode* AINav::find_nearby_node(const FVector& loc, float sq_radius) {
-#ifdef AINAV_DEBUG
-	check(sq_radius >= MIN_SQ_RADIUS);
-#endif
-	uint32 box_ct;
-	const auto graph_boxes = get_nearby_graph_boxes(loc, box_ct);
-	if (graph_boxes == nullptr) {
-		return nullptr;
-	}
-	for (uint32 i = 0; i < box_ct; i++) {
-		auto& graph_box = *graph_boxes[i];
-		for (int j = 0; j < graph_box.Num(); j++) {
-			NavNode& node = graph_box[j];
-			const FVector diff = node.location - loc;
-			const float sq_dist = diff.SizeSquared();
-			if (sq_dist <= sq_radius) {
-				const FVector offset = node.normal * 0.1f;
-				const FVector tr_start = loc + offset;
-				const FVector tr_end = node.location + offset;
-				if (
-					comm::trace_hit_static_actor(tr_start, tr_end) > 0.0f 
-					|| comm::trace_hit_static_actor(tr_end, tr_start) > 0.0f
-				) {
-					continue;
-				}
-				return &node;
-			}
-		}
-	}
-	return nullptr;
-}
+// ---------------------------------------------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------------:graph indexing
+// ---------------------------------------------------------------------------------------------------------------------
 
 bool AINav::get_grid_pos(const FVector& loc, FIntVector& gpos) const {
 	gpos = FIntVector((loc - world_origin) * inv_gbox_world_dims);
@@ -799,8 +629,155 @@ TArray<AINav::NavNode>** AINav::get_nearby_graph_boxes(const FVector& loc, uint3
 	return graph_box_cache;
 }
 
-// hacky way of smoothing. creates 2 sub-waypoints per waypoint and runs a smoothing algorithm
-// over them. 
+// ---------------------------------------------------------------------------------------------------------------------
+// -------------------------------------------------------------------------------------------------:pathfinding helpers
+// ---------------------------------------------------------------------------------------------------------------------
+
+int AINav::find_cached_path(const FVector& from, const FVector& to, bool& copy_backward) const {
+	for (int i = 0; i < PATH_CACHE_LEN; i++) {
+		const FVector& path_start  = smoothed_path_cache[i][0];
+		const FVector& path_end = smoothed_path_cache[i][path_lens[i] - 1];
+		if (path_statuses[i] == AI_PATH_READY) {
+			if (path_match(from, to, path_start, path_end)) {
+				return i;
+			}
+			if (path_match(from, to, path_end, path_start)) {
+				copy_backward = true;
+				return i;
+			}
+		}
+	}
+	return -1;
+}
+
+int AINav::find_cached_path_start_rad(
+	const FVector& from,
+	const FVector& to,
+	bool& copy_backward,
+	float start_rad
+) const {
+	for (int i = 0; i < PATH_CACHE_LEN; i++) {
+		const FVector& path_start  = smoothed_path_cache[i][0];
+		const FVector& path_end = smoothed_path_cache[i][path_lens[i] - 1];
+		if (path_statuses[i] == AI_PATH_READY) {
+			if (path_match_start_rad(from, to, path_start, path_end, start_rad)) {
+				return i;
+			}
+			if (path_match_end_rad(from, to, path_end, path_start, start_rad)) {
+				copy_backward = true;
+				return i;
+			}
+		}
+	}
+	return -1;
+}
+
+int AINav::find_cached_path_end_rad(
+	const FVector& from,
+	const FVector& to,
+	bool& copy_backward,
+	float end_rad
+) const {
+	for (int i = 0; i < PATH_CACHE_LEN; i++) {
+		const FVector& path_start  = smoothed_path_cache[i][0];
+		const FVector& path_end = smoothed_path_cache[i][path_lens[i] - 1];
+		if (path_statuses[i] == AI_PATH_READY) {
+			if (path_match_end_rad(from, to, path_start, path_end, end_rad)) {
+				return i;
+			}
+			if (path_match_start_rad(from, to, path_end, path_start, end_rad)) {
+				copy_backward = true;
+				return i;
+			}
+		}
+	}
+	return -1;
+}
+
+int AINav::find_cached_path_two_rad(
+	const FVector& from,
+	const FVector& to,
+	bool& copy_backward,
+	float start_rad,
+	float end_rad
+) const {
+	for (int i = 0; i < PATH_CACHE_LEN; i++) {
+		const FVector& path_start  = smoothed_path_cache[i][0];
+		const FVector& path_end = smoothed_path_cache[i][path_lens[i] - 1];
+		if (path_statuses[i] == AI_PATH_READY) {
+			if (path_match_two_rad(from, to, path_start, path_end, start_rad, end_rad)) {
+				return i;
+			}
+			if (path_match_two_rad(from, to, path_end, path_start, start_rad, end_rad)) {
+				copy_backward = true;
+				return i;
+			}
+		}
+	}
+	return -1;
+}
+
+bool AINav::path_match_two_rad(
+	const FVector& from,
+	const FVector& to,
+	const FVector& path_a,
+	const FVector& path_b,
+	float start_radius,
+	float end_radius
+) {
+	return (
+		(
+			from == path_a
+			|| (from - path_a).SizeSquared() < start_radius
+		) && (
+			to == path_b
+			|| (to - path_b).SizeSquared() < end_radius
+		)
+	);
+}
+
+bool AINav::path_match_start_rad(
+	const FVector& from,
+	const FVector& to,
+	const FVector& path_a,
+	const FVector& path_b,
+	float start_radius
+) {
+	return (
+		(
+			from == path_a
+			|| (from - path_a).SizeSquared() < start_radius
+		)
+		&& to == path_b
+	);
+}
+
+bool AINav::path_match_end_rad(
+	const FVector& from,
+	const FVector& to,
+	const FVector& path_a,
+	const FVector& path_b,
+	float end_radius
+) {
+	return (
+		from == path_a
+		&& (
+			to == path_b
+			|| (to - path_b).SizeSquared() < end_radius
+		)
+	);
+}
+
+bool AINav::path_match(
+	const FVector& from,
+	const FVector& to,
+	const FVector& path_a,
+	const FVector& path_b
+) {
+	return from == path_a && to == path_b;	
+}
+
+// creates PATH_SMOOTH_DIVISIONS-1 sub-waypoints per waypoint and runs a smoothing algorithm over them. 
 // TODO: use knowledge of mesh to flexibly move points along the mesh - more flexible and likely more successful
 // TODO: cull nearby waypoints that line test ok
 void AINav::smooth_path(int key, int path_len) {
@@ -864,20 +841,97 @@ void AINav::smooth_path(int key, int path_len) {
 	path_lens[key] = (path_len - 1) * PATH_SMOOTH_DIVISIONS + 1;
 }
 
-void AINav::node_net_spatial_normalization(void* init_nodes) {
-	// - start at good candidate node (normal not in-line with y axis or x axis)
-	// - rotate world x-axis onto node's tri plane. move in that direction until reaching edge
-	// rotate movement vector onto next tri with no y axis component. continue moving until reaching distance decided
-	// by parameter. drop a node, connect to prev.
-	// - continue until either can no longer, or a loop is mode.
-	// - for each node in net, do the same as before, but starting with y-axis.
-	// - any node that has not yet explored either axis should do so
-	// - if dist < intended node dist, but the normal theta delta since starting is great enough, drop a node.
-	// - if a node is near enough to an edge or node and passes line test, either connect to the other node or create
-	// - a new node on the edge and connect to that.
-	// - if a node is nearer and all edge collision tests pass, merge nodes.
-	// - for any init_nodes that are not 'covered' by new net, drop a new node there and repeat the process
+// ---------------------------------------------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------------------------------------:draw
+// ---------------------------------------------------------------------------------------------------------------------
+
+void AINav::dbg_draw_graph() {
+	GSPACE_ITERATE_START
+	auto& box_nodes = nav_graph[i][j][k];
+	TArray<TPair<NavNode*, NavNode*>> node_pairs;
+	for (int m = 0; m < box_nodes.Num(); m++) {
+		auto& node = box_nodes[m];
+		DrawDebugCircle(world, node.location, 2.0f, 3, FColor::Red);
+		for (int n = 0; n < node.edges.Num(); n++) {
+			NavNode* node_edge = node.edges[n];
+			TPair<NavNode*, NavNode*> pair_a(&node, node_edge);
+			TPair<NavNode*, NavNode*> pair_b(node_edge, &node);
+			if (node_pairs.Find(pair_a) >= 0 || node_pairs.Find(pair_b) >= 0) {
+				continue;
+			}
+			DrawDebugLine(
+				world,
+				node.location,
+				node_edge->location,
+				FColor::Blue,
+				false,
+				-1,
+				0,
+				1.0f
+			);
+			node_pairs.Add(pair_a);
+		}
+	}
+	GSPACE_ITERATE_END
 }
+
+void AINav::dbg_draw_nav_graph(const FVector& loc) {
+	uint32 box_ct;
+	const auto graph_boxes = get_nearby_graph_boxes(loc, box_ct);
+	if (graph_boxes == nullptr) {
+		return;
+	}
+	TArray<TPair<NavNode*, NavNode*>> node_pairs;
+	for (uint32 i = 0; i < box_ct; i++) {
+		auto& graph_box = *graph_boxes[i];
+		for (int j = 0; j < graph_box.Num(); j++) {
+			NavNode& node = graph_box[j];
+			DrawDebugCircle(world, node.location, 2.0f, 3, FColor::Red);
+			for (int n = 0; n < node.edges.Num(); n++) {
+				NavNode* node_edge = node.edges[n];
+				TPair<NavNode*, NavNode*> pair_a(&node, node_edge);
+				TPair<NavNode*, NavNode*> pair_b(node_edge, &node);
+				if (node_pairs.Find(pair_a) >= 0 || node_pairs.Find(pair_b) >= 0) {
+					continue;
+				}
+				DrawDebugLine(
+					world,
+					node.location,
+					node_edge->location,
+					FColor::Blue,
+					false,
+					-1,
+					0,
+					1.0f
+				);
+				node_pairs.Add(pair_a);
+			}
+		}
+	}
+}
+
+void AINav::dbg_draw_normals() {
+	GSPACE_ITERATE_START
+	auto& box_nodes = nav_graph[i][j][k];
+	for (int m = 0; m < box_nodes.Num(); m++) {
+		auto& node = box_nodes[m];
+		DrawDebugLine(
+			world,
+			node.location,
+			node.location + node.normal * 5.0f,
+			FColor::Blue,
+			false,
+			-1,
+			0,
+			1.0f
+		);
+	}
+	GSPACE_ITERATE_END
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------------------------------:benchmarking
+// ---------------------------------------------------------------------------------------------------------------------
 
 void AINav::update_time_test(TIME_TEST_CODE c) {
 	if (ttc_state == TTC_PATHFINDER_TIMING) {

@@ -347,18 +347,12 @@ void TriGrid::dbg_toggle_ground_mesh_visibility() {
 	TArray<AActor*> static_mesh_actors;
 	UGameplayStatics::GetAllActorsOfClass(world, AStaticMeshActor::StaticClass(), static_mesh_actors);
 	if (ground_mesh_visibility) {
-		// for (int i = 0; i < mesh_cmps.Num(); i++) {
-		// 	mesh_cmps[i]->SetVisibility(false);
-		// }
 		for (int i = 0; i < static_mesh_actors.Num(); i++) {
 			Cast<AStaticMeshActor>(static_mesh_actors[i])->GetStaticMeshComponent()->SetVisibility(false);
 		}
 		ground_mesh_visibility = false;
 	}
 	else {
-		// for (int i = 0; i < mesh_cmps.Num(); i++) {
-		// 	mesh_cmps[i]->SetVisibility(true);
-		// }
 		for (int i = 0; i < static_mesh_actors.Num(); i++) {
 			Cast<AStaticMeshActor>(static_mesh_actors[i])->GetStaticMeshComponent()->SetVisibility(true);
 		}
