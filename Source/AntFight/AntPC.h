@@ -9,7 +9,4 @@
 UCLASS()
 class ANTFIGHT_API AAntPC : public APlayerController {
 	GENERATED_BODY()
-	
-	UFUNCTION(Exec, Category=ExecFunctions)
-	void cling_draw(int val);
 };

@@ -15,6 +15,18 @@ public:
 		AI_PATH_FINDING
 	};
 
+	enum TIME_TEST_CODE {
+		TTC_FIND_PATH,
+		TTC_CACHE_FIND,
+		TTC_PATHFINDER_END
+	};
+
+	enum TIME_TEST_STATE {
+		TTC_PATHFINDER_TIMING,
+		TTC_CACHED_TIMING,
+		TTC_FINISHED
+	};
+
 	struct InitNode {
 		InitNode(Tri& _tri) {
 			tri = &_tri;
@@ -24,7 +36,7 @@ public:
 
 		Tri* tri;
 		FVector loc;
-		TArray<InitNode*> edges; // 0 = AB, 1 = BC, 2 = CA
+		TArray<InitNode*> edges;
 		TArray<int> cross_connections; // connections to other grid boxes, encoded
 		FIntVector4 navnode_indices;
 		bool culled;
@@ -66,22 +78,26 @@ public:
 		}
 	};
 
-	static constexpr int PATH_MAX_LEN = 200;
-	static constexpr int PATH_SMOOTH_DIVISIONS = 3;
+	// coming just over the top of the in-practice max path len keeps long paths from being fragmented,
+	// reducing overwrites in the cache
+	static constexpr int PATH_MAX_LEN = 130;
+	static constexpr int PATH_SMOOTH_DIVISIONS = 2;
 	static constexpr int INV_PATH_SMOOTH_DIVISIONS = 1.0f / (float)PATH_SMOOTH_DIVISIONS;
-	static constexpr int SMOOTHED_PATH_MAX_LEN = PATH_MAX_LEN * (PATH_SMOOTH_DIVISIONS - 1) + 1;	
-	static constexpr int PATH_CACHE_LEN = 100;
+	static constexpr int SMOOTHED_PATH_MAX_LEN = (PATH_MAX_LEN - 1) * PATH_SMOOTH_DIVISIONS + 1;
+	// 10/3/22: 90 gives best results - cache_hit: ~44%, avg find_path() response time: ~54ms
+	static constexpr int PATH_CACHE_LEN = 90;
 	static constexpr int MAX_NODES_PER_BOX = 25;
 	static constexpr int GSPACE_SIDELEN = TriGrid::GSPACE_SIDELEN;
 	static constexpr int GSPACE_SIDELEN_SQ = GSPACE_SIDELEN * GSPACE_SIDELEN;
 	static constexpr int GSPACE_SIDELEN_M1 = GSPACE_SIDELEN - 1;
 	static constexpr float NORMAL_MAX_ANGLE = 3.0f * PI / 8.0f;
 	static constexpr float MIN_SQ_RADIUS = 8000.0f; // TODO: make dependent on whatever parameters normalize the graph
+	static constexpr float KEEP_ALIVE_TIME = 20.0f;
 
 	AINav();
 	~AINav();
 	void build_graph(UWorld* world, TriGrid* tri_grid);
-	void dbg_draw(float delta_time);
+	void tick(float delta_time);
 	void dbg_draw_navmesh(const FVector& near_loc);
 	// earlier, currently unused but maybe future-ly usable implementation; problem: with a radius
 	// around the start location, the path to the start point might be unclear. Also requires two nearby node searches
@@ -151,12 +167,20 @@ private:
 	AI_PATH_STATUS path_statuses[PATH_CACHE_LEN];
 	int path_lens[PATH_CACHE_LEN];
 	bool path_complete[PATH_CACHE_LEN];
+	float path_keep_alive[PATH_CACHE_LEN];
 	int cache_write_i;
 	
 	UWorld* world;
 	FVector inv_gbox_world_dims;
 	FVector world_origin;
 	TArray<NavNode>* graph_box_cache[27];
+
+	TIME_TEST_STATE ttc_state;
+	int ttc_cached_ct;
+	int ttc_pathfinder_ct;
+	double ttc_pathfinding_max;	
+	double ttc_pathfinding_avg;
+	bool ttc_reset;
 
 	static void init_node_net(TriGrid* tri_grid, void* init_nodes);
 	static void filter_node_net(void* init_nodes);
@@ -218,6 +242,7 @@ private:
 	TArray<NavNode>** get_nearby_graph_boxes(const FVector& loc, uint32& ct);
 	void smooth_path(int key, int path_len);
 	void node_net_spatial_normalization(void* init_nodes);
+	void update_time_test(TIME_TEST_CODE c);
 };
 
 

@@ -4,21 +4,23 @@
 #include "PathFinder.h"
 #include "Tri.h"
 
-// TODO hold onto path in smoothed cache for a little time or until dispatch says OK to freeing it up, to allow
-// a little time for unfinished pathers to copy theirs (since they try to get theirs ahead of time)
-
 AINav::AINav() :
 	pathfinder(nullptr),
 	pathfinder_path_len(-1),
 	pathfinding(false),
 	cache_write_i(0),
-	world(nullptr)
+	world(nullptr),
+	ttc_state(TTC_PATHFINDER_TIMING),
+	ttc_cached_ct(0),
+	ttc_pathfinder_ct(0),
+	ttc_reset(true)
 {
 	memset(smoothed_path_cache, 0, PATH_CACHE_LEN * SMOOTHED_PATH_MAX_LEN * sizeof(FVector));
 	memset(pathfinder_buf, NULL, PATH_MAX_LEN * sizeof(FVector*));
 	memset(path_statuses, AI_PATH_FREE, PATH_CACHE_LEN * sizeof(AI_PATH_STATUS));
 	memset(path_lens, 0, PATH_CACHE_LEN * sizeof(int));
 	memset(graph_box_cache, NULL, 27 * sizeof(TArray<NavNode>*));
+	memset(path_keep_alive, 0, PATH_CACHE_LEN * sizeof(float));
 }
 
 AINav::~AINav() {
@@ -41,11 +43,16 @@ void AINav::build_graph(UWorld* _world, TriGrid* tri_grid) {
 	set_nav_graph((void*)init_nodes);
 }
 
-void AINav::dbg_draw(float delta_time) {
+void AINav::tick(float delta_time) {
+	
 #ifdef AINAV_DEBUG
 	// dbg_draw_normals();
 	// dbg_draw_graph();
-#endif 
+#endif
+
+	for (int i = 0; i < PATH_CACHE_LEN; i++) {
+		path_keep_alive[i] -= delta_time;
+	}
 }
 
 void AINav::dbg_draw_navmesh(const FVector& loc) {
@@ -85,6 +92,7 @@ int AINav::find_path(
 	const int cached_path_index = find_cached_path_two_rad(from, to, copy_backward, sq_start_radius, sq_end_radius);	
 	if (cached_path_index >= 0) {
 		cached = true;
+		path_keep_alive[cached_path_index] = KEEP_ALIVE_TIME;
 		return cached_path_index;
 	}
 	if (!pathfinding) {
@@ -135,8 +143,18 @@ int AINav::find_path(
 	bool& copy_backward,
 	float sq_end_radius
 ) {
+	
+#ifdef AINAV_DEBUG
+	update_time_test(AINav::TTC_FIND_PATH);
+#endif
+
 	const int cached_path_index = find_cached_path_end_rad(start_node->location, to, copy_backward, sq_end_radius);	
 	if (cached_path_index >= 0) {
+		
+#ifdef AINAV_DEBUG
+		update_time_test(AINav::TTC_CACHE_FIND);
+#endif
+		
 		cached = true;
 		return cached_path_index;
 	}
@@ -145,9 +163,16 @@ int AINav::find_path(
 		if (end_node == nullptr || start_node->location == end_node->location) {
 			return -1;
 		}
-		// TODO: probably unnecessary - remove?
-		for (int i = 0; i < PATH_MAX_LEN; i++) {
-			pathfinder_buf[i] = nullptr;
+		if (path_keep_alive[cache_write_i] > 0.0f) {
+			for (int i = 0; i < PATH_CACHE_LEN; i++) {
+				cache_write_i++;
+				if (cache_write_i >= PATH_CACHE_LEN) {
+					cache_write_i = 0;
+				}
+				if (path_keep_alive[cache_write_i] <= 0.0f) {
+					break;
+				}
+			}
 		}
 		GSPACE_ITERATE_START
 		auto& graph_box = nav_graph[i][j][k];
@@ -210,6 +235,12 @@ bool AINav::path_is_complete(int key) const {
 
 void AINav::pathfinding_finished() {
 	if (pathfinder_path_len > 0) { // if success
+		
+#ifdef AINAV_DEBUG
+		update_time_test(AINav::TTC_PATHFINDER_END);
+#endif
+
+		path_keep_alive[cache_write_i] = KEEP_ALIVE_TIME;
 		smooth_path(cache_write_i, pathfinder_path_len);
 		start_nodes[cache_write_i] = pathfinder_buf[0];
 		end_nodes[cache_write_i] = pathfinder_buf[pathfinder_path_len - 1];
@@ -773,25 +804,24 @@ TArray<AINav::NavNode>** AINav::get_nearby_graph_boxes(const FVector& loc, uint3
 // TODO: use knowledge of mesh to flexibly move points along the mesh - more flexible and likely more successful
 // TODO: cull nearby waypoints that line test ok
 void AINav::smooth_path(int key, int path_len) {
-	static constexpr int PASS_CT = 5;
-	static constexpr float STRENGTH = 0.8f;
+	static constexpr int PASS_CT = 3;
+	static constexpr float STRENGTH = 0.98f;
 	static constexpr float HIT_TEST_OFFSET = 7.0f;
+	static constexpr float PATH_SMOOTH_DIVISIONS_INV = 1.0f / PATH_SMOOTH_DIVISIONS;
 	FVector normal_buf[SMOOTHED_PATH_MAX_LEN];
 	const int end_i = path_len - 1;
 	const float tr_offset = 0.3f;
 	FVector* waypoints = smoothed_path_cache[key];
 	for (int i = 0; i < end_i; i++) {
-		const int wp_i = 3 * i;
+		const int wp_i = PATH_SMOOTH_DIVISIONS * i;
 		FVector& path_pos = pathfinder_buf[i]->location;
 		FVector diff = pathfinder_buf[i + 1]->location - path_pos;
-		waypoints[wp_i] = path_pos;
-		waypoints[wp_i + 1] = path_pos + diff * 0.3333f;
-		waypoints[wp_i + 2] = path_pos + diff * 0.6666f;
 		const FVector& normal = pathfinder_buf[i]->normal;
+		waypoints[wp_i] = path_pos;
 		normal_buf[wp_i] = normal;
-		normal_buf[wp_i + 1] = normal;
-		normal_buf[wp_i + 2] = normal;
-		for (int j = wp_i; j < wp_i + 3; j++) {
+		for (int j = wp_i + 1, k = 1; j < wp_i + PATH_SMOOTH_DIVISIONS; j++, k++) {
+			waypoints[j] = path_pos + diff * (PATH_SMOOTH_DIVISIONS_INV * k);
+			normal_buf[j] = normal;
 			FVector& wp = waypoints[j];
 			FVector& n = normal_buf[j];
 			const FVector& tr_start = wp + n * HIT_TEST_OFFSET;
@@ -802,11 +832,11 @@ void AINav::smooth_path(int key, int path_len) {
 					wp += n * (HIT_TEST_OFFSET - hit_dist + 4.0f);
 				}
 			}
-			waypoints[j] = wp;
+			// waypoints[j] = wp;
 		}
 	}
 
-	const int wp_end_i = end_i * 3;
+	const int wp_end_i = end_i * PATH_SMOOTH_DIVISIONS;
 	const int wp_end_i_m1 = wp_end_i - 1;
 	waypoints[wp_end_i] = pathfinder_buf[end_i]->location;
 	
@@ -831,7 +861,7 @@ void AINav::smooth_path(int key, int path_len) {
 			cur = new_cur;
 		}	
 	}
-	path_lens[key] = (path_len - 1) * 3 + 1;
+	path_lens[key] = (path_len - 1) * PATH_SMOOTH_DIVISIONS + 1;
 }
 
 void AINav::node_net_spatial_normalization(void* init_nodes) {
@@ -847,5 +877,60 @@ void AINav::node_net_spatial_normalization(void* init_nodes) {
 	// - a new node on the edge and connect to that.
 	// - if a node is nearer and all edge collision tests pass, merge nodes.
 	// - for any init_nodes that are not 'covered' by new net, drop a new node there and repeat the process
-	
+}
+
+void AINav::update_time_test(TIME_TEST_CODE c) {
+	if (ttc_state == TTC_PATHFINDER_TIMING) {
+		if (c == TTC_FIND_PATH && !pathfinding) {
+			comm::log_start_time();	
+		}
+		else if (c == TTC_PATHFINDER_END) {
+			comm::log_end_time();
+			ttc_pathfinder_ct++;
+		}
+		else if (c == TTC_CACHE_FIND) {
+			ttc_cached_ct++;
+		}
+		if (comm::times_full()) {
+			ttc_pathfinding_max = comm::get_time_max() * 1000.0;
+			ttc_pathfinding_avg = comm::get_time_avg() * 1000.0;
+			ttc_state = TTC_CACHED_TIMING;	
+			comm::clear_times();
+		}
+	}
+	else if (ttc_state == TTC_CACHED_TIMING) {
+		if (c == TTC_FIND_PATH) {
+			comm::log_start_time();	
+		}
+		else if (c == TTC_PATHFINDER_END) {
+			ttc_pathfinder_ct++;
+		}
+		else {
+			comm::log_end_time();
+			ttc_cached_ct++;
+		}
+		
+		if (comm::times_full()) {
+			const double ttc_cached_max = comm::get_time_max() * 1000.0;
+			const double ttc_cached_avg = comm::get_time_avg() * 1000.0;
+			ttc_state = TTC_FINISHED;	
+			comm::clear_times();
+			
+			comm::print("---\nAINav time test:");
+			comm::print("cache, avg time: %.3lf ms, max time: %.3lf ms", ttc_cached_avg, ttc_cached_max);
+			comm::print("pathf, avg time: %.3lf ms, max time: %.3lf ms", ttc_pathfinding_avg, ttc_pathfinding_max);
+			const double total_inv = 1.0 / (double)(ttc_cached_ct + ttc_pathfinder_ct);
+			const double cached_wt = (double)ttc_cached_ct * total_inv;
+			const double pathfind_wt = 1.0 - cached_wt;
+			comm::print("cache hit %.2lf percent", cached_wt * 100.0);
+			const double weighted_avg = ttc_cached_avg * cached_wt + ttc_pathfinding_avg * pathfind_wt;
+			comm::print("weighted avg time: %.3lf ms\n---", weighted_avg);
+
+			if (ttc_reset) {
+				ttc_cached_ct = 0;
+				ttc_pathfinder_ct = 0;
+				ttc_state = TTC_PATHFINDER_TIMING;
+			}
+		}
+	}
 }

@@ -19,7 +19,6 @@ void AAntAIDispatch::BeginPlay() {
 		if (ant) {
 			ant->set_dispatch(this);
 			ants.Add(ant);
-			
 		}
 		else {
 			AAntPlayer* ant_player = Cast<AAntPlayer>(actors[i]);

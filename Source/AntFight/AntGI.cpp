@@ -1,10 +1,7 @@
 #include "AntGI.h"
-
 #include "BPSpawner.h"
-#include "Cling.h"
 #include "Common.h"
 #include "TickActor.h"
-#include "Kismet/GameplayStatics.h"
 
 
 void UAntGI::Init() {

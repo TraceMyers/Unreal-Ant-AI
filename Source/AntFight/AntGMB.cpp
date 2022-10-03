@@ -34,7 +34,7 @@ void AAntGMB::BeginPlay() {
 void AAntGMB::Tick(float DeltaSeconds) {
 	Super::Tick(DeltaSeconds);
 	tri_grid.dbg_draw(DeltaSeconds);
-	ai_nav.dbg_draw(DeltaSeconds);
+	ai_nav.tick(DeltaSeconds);
 }
 
 void AAntGMB::draw_navmesh(const FVector& near_loc) {

@@ -153,13 +153,13 @@ void AAntAI::set_true_move(float delta_time) {
 	const FVector& prev_true_move = true_move;
 	true_move = FVector::ZeroVector;
 	if (status == AI_STATUS_INIT_PATH) {
-		// comm::print("%s init path", TCHAR_TO_ANSI(*this->GetName()));
-		int test_key;
 		if (!path_incomplete) {
+			int test_key; // currently unused
 			destination = dispatch->test_get_destination(test_key);
 		}	
 		bool pathing = false;
-		if (dispatch->get_path(this, destination, pathing)) {
+		const bool init_success = dispatch->get_path(this, destination, pathing);
+		if (init_success) {
 			path_incomplete = false;
 			if (pathing) {
 				status = AI_STATUS_PATHING;
@@ -173,10 +173,8 @@ void AAntAI::set_true_move(float delta_time) {
 		}
 	}
 	else if (status == AI_STATUS_WAITING) {
-		// comm::print("%s waiting", TCHAR_TO_ANSI(*this->GetName()));
-		DISPATCH_STATUS dstatus = dispatch->get_pathfinding_status(this, path_incomplete);
+		const DISPATCH_STATUS dstatus = dispatch->get_pathfinding_status(this, path_incomplete);
 		if (dstatus == DISPATCH_FAILED) {
-			comm::print("%s dispatch failed", TCHAR_TO_ANSI(*this->GetName()));
 			status = AI_STATUS_INIT_PATH;
 		}
 		else if (dstatus == DISPATCH_READY) {

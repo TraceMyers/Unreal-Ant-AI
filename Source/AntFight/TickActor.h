@@ -1,7 +1,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Cling.h"
 #include "GameFramework/Actor.h"
 #include "TickActor.generated.h"
 

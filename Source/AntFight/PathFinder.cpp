@@ -64,7 +64,7 @@ uint32 FPathFinder::Run() {
 	while (run_thread) {
 		success = search_multistep();
 		total_step_ct += STEP_CT;
-		if (total_step_ct > 100000) {
+		if (total_step_ct > 120000) {
 			run_thread = false;
 			break;
 		}
