@@ -1,9 +1,9 @@
 ﻿#pragma once
 
-// #define ORIENTATION_DEBUG 1
-// #define TRIGRID_DEBUG 1
-// #define AINAV_DEBUG 1
-// #define ANTAIDISPATCH_DEBUG 1
+// #define ORIENTATION_DEBUG
+// #define TRIGRID_DEBUG
+// #define AINAV_DEBUG
+// #define ANTAIDISPATCH_DEBUG
 
 namespace comm {
 

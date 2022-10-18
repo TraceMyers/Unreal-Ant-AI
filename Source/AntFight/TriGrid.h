@@ -3,7 +3,7 @@
 #include "CoreMinimal.h"
 #include "Tri.h"
 
-// sue me
+// apologies, this is just too convenient
 # define GSPACE_ITERATE_START \
 	for (int i = 0; i < TriGrid::GSPACE_SIDELEN; i++) { \
 	for (int j = 0; j < TriGrid::GSPACE_SIDELEN; j++) { \
